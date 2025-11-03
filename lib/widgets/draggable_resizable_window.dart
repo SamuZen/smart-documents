@@ -39,6 +39,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   static const double _dockThreshold = 80.0; // Distância para ativar dock (aumentado)
   String? _currentDockZone; // 'left', 'right', 'top', 'bottom', null
   String? _lastDetectedDockZone; // Última zona detectada durante o drag
+  String? _dockedZone; // Zona onde a janela está dockada (null se não dockada)
   Size? _screenSize;
 
   @override
@@ -51,6 +52,17 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
 
   void _onDragStart(DragStartDetails details) {
     if (!_isResizing) {
+      // Se estava dockado, remove o dock ao começar a arrastar
+      if (_dockedZone != null) {
+        // Salva o tamanho atual antes de des-dockar
+        final previousWidth = _width;
+        final previousHeight = _height;
+        _dockedZone = null;
+        // Restaura tamanho original se necessário
+        _width = previousWidth;
+        _height = previousHeight;
+      }
+      
       setState(() {
         _isDragging = true;
         _currentDockZone = null;
@@ -90,20 +102,86 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
     _currentDockZone = newZone;
   }
 
-  Offset _applyDock(Offset position, Size screenSize) {
-    if (_currentDockZone == null) return position;
+  Offset _applyDock(Offset position, Size screenSize, String dockZone) {
+    // Usa o tamanho disponível (MediaQuery já considera AppBar no build)
+    final availableSize = _getAvailableSize(screenSize);
     
-    switch (_currentDockZone) {
+    switch (dockZone) {
       case 'left':
-        return Offset(0, position.dy);
+        return Offset(0, 0);
       case 'right':
-        return Offset(screenSize.width - _width, position.dy);
+        return Offset(availableSize.width - _width, 0);
       case 'top':
-        return Offset(position.dx, 0);
+        return Offset(0, 0);
       case 'bottom':
-        return Offset(position.dx, screenSize.height - _height);
+        return Offset(0, availableSize.height - _height);
       default:
         return position;
+    }
+  }
+
+  Size _getAvailableSize(Size screenSize) {
+    // Obtém o tamanho disponível no body (considerando AppBar)
+    // Como estamos dentro do body do Scaffold, o Positioned(0,0) já começa abaixo do AppBar
+    // Então precisamos calcular o tamanho disponível considerando o AppBar
+    final mediaQuery = MediaQuery.maybeOf(context);
+    if (mediaQuery != null) {
+      final size = mediaQuery.size;
+      final padding = mediaQuery.padding;
+      
+      // O AppBar padrão tem altura baseada no tema
+      // Usamos a constante padrão do Material Design (56px)
+      // Ou podemos usar AppBar.toolbarHeight se disponível
+      final toolbarHeight = mediaQuery.orientation == Orientation.portrait ? 56.0 : 48.0;
+      final appBarHeight = toolbarHeight + padding.top;
+      
+      // O tamanho disponível no body é:
+      // - Largura: largura total menos padding horizontal
+      // - Altura: altura total menos AppBar completo (toolbar + status bar) menos padding bottom
+      final availableWidth = size.width - padding.left - padding.right;
+      final availableHeight = size.height - appBarHeight - padding.bottom;
+      
+      return Size(availableWidth, availableHeight);
+    }
+    return screenSize;
+  }
+
+  Size _applyDockSize(Size screenSize, String dockZone) {
+    // Usa o tamanho disponível (já considera AppBar automaticamente no build)
+    final availableSize = _getAvailableSize(screenSize);
+    
+    switch (dockZone) {
+      case 'left':
+      case 'right':
+        // Para dock lateral, ajusta altura para ocupar toda área disponível
+        return Size(_width, availableSize.height);
+      case 'top':
+      case 'bottom':
+        // Para dock vertical, ajusta largura para ocupar toda área disponível
+        return Size(availableSize.width, _height);
+      default:
+        return Size(_width, _height);
+    }
+  }
+  
+  void _adjustDockedSize() {
+    // Ajusta tamanho e posição se estiver dockado
+    if (_dockedZone != null && _screenSize != null) {
+      final mediaQuery = MediaQuery.maybeOf(context);
+      if (mediaQuery != null) {
+        final newScreenSize = mediaQuery.size;
+        if (newScreenSize != _screenSize) {
+          _screenSize = newScreenSize;
+          final dockedPosition = _applyDock(_position, _screenSize!, _dockedZone!);
+          final dockedSize = _applyDockSize(_screenSize!, _dockedZone!);
+          
+          setState(() {
+            _position = dockedPosition;
+            _width = dockedSize.width;
+            _height = dockedSize.height;
+          });
+        }
+      }
     }
   }
 
@@ -120,30 +198,22 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
       if (mediaQuery != null) {
         _screenSize = mediaQuery.size;
         
-        // Aplica limites suaves (permite pequeno overflow para facilitar dock)
-        // Mas garante que não saia completamente da tela
-        final minX = -_width * 0.2; // Permite 20% de overflow
-        final maxX = _screenSize!.width - _width * 0.8;
-        final minY = -_height * 0.2;
-        final maxY = _screenSize!.height - _height * 0.8;
+        // IMPORTANTE: Detecta zona de dock ANTES de aplicar qualquer clamp
+        // Usa a posição "livre" para detectar se estamos próximos da borda
+        _updateDockZone(newPosition, _screenSize!);
         
-        final clampedPosition = Offset(
-          newPosition.dx.clamp(minX, maxX),
-          newPosition.dy.clamp(minY, maxY),
-        );
-        
-        // Atualiza zona de dock ANTES do setState (sem setState separado)
-        final oldZone = _currentDockZone;
-        _updateDockZone(clampedPosition, _screenSize!);
-        final zoneChanged = oldZone != _currentDockZone;
+        // Se estiver em zona de dock, permite movimento mais livre para facilitar
+        // Caso contrário, aplica limites suaves
+        final clampedPosition = _currentDockZone != null
+            ? newPosition // Em zona de dock, permite movimento mais livre
+            : Offset(
+                newPosition.dx.clamp(0, _screenSize!.width - _width),
+                newPosition.dy.clamp(0, _screenSize!.height - _height),
+              );
         
         // Um único setState para tudo
         setState(() {
           _position = clampedPosition;
-          // Força rebuild se a zona mudou (para mostrar/esconder indicador)
-          if (zoneChanged) {
-            // Já atualizado em _updateDockZone
-          }
         });
       } else {
         setState(() {
@@ -154,19 +224,30 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   }
 
   void _finishDrag() {
-    // Usa a última zona detectada OU a zona atual
+    // Usa a última zona detectada OU a zona atual (preferência para atual)
     final zoneToDock = _currentDockZone ?? _lastDetectedDockZone;
     
+    // Debug: verifica se temos zona e tamanho da tela
+    if (_screenSize == null) {
+      final mediaQuery = MediaQuery.maybeOf(context);
+      if (mediaQuery != null) {
+        _screenSize = mediaQuery.size;
+      }
+    }
+    
     if (_screenSize != null && zoneToDock != null) {
-      // Temporariamente define a zona para calcular o dock corretamente
-      _currentDockZone = zoneToDock;
+      // Marca como dockado
+      _dockedZone = zoneToDock;
       
-      // Aplica o dock imediatamente
-      final dockedPosition = _applyDock(_position, _screenSize!);
+      // Aplica o dock na posição e no tamanho
+      final dockedPosition = _applyDock(_position, _screenSize!, zoneToDock);
+      final dockedSize = _applyDockSize(_screenSize!, zoneToDock);
       
-      // Atualiza posição imediatamente
+      // Atualiza posição e tamanho imediatamente
       setState(() {
         _position = dockedPosition;
+        _width = dockedSize.width;
+        _height = dockedSize.height;
         _isDragging = false;
         _currentDockZone = null;
         _lastDetectedDockZone = null;
@@ -227,7 +308,14 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    _screenSize ??= mediaQuery.size;
+    final currentScreenSize = mediaQuery.size;
+    
+    // Ajusta tamanho se dockado e a tela mudou
+    if (_screenSize != null && currentScreenSize != _screenSize) {
+      _adjustDockedSize();
+    } else {
+      _screenSize = currentScreenSize;
+    }
     
     return Stack(
       children: [
