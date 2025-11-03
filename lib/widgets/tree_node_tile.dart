@@ -73,15 +73,18 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
       print('🔵 [TreeNodeTile] INICIANDO EDIÇÃO - Node: ${widget.node.id} | Nome: "${widget.node.name}"');
       developer.log('TreeNodeTile: Entrando em modo de edição para node ${widget.node.id} (${widget.node.name})');
       _textController.text = widget.node.name;
-      _focusNode.requestFocus();
+      // Usa post frame callback para garantir que o widget está totalmente construído
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _textController.selection = TextSelection(
-          baseOffset: 0,
-          extentOffset: _textController.text.length,
-        );
-        // Registra a função confirmEditing no TreeView para ser chamada quando Enter for pressionado
-        if (widget.onConfirmEditing != null) {
-          widget.onConfirmEditing!(confirmEditing);
+        if (mounted) {
+          _focusNode.requestFocus();
+          _textController.selection = TextSelection(
+            baseOffset: 0,
+            extentOffset: _textController.text.length,
+          );
+          // Registra a função confirmEditing no TreeView para ser chamada quando Enter for pressionado
+          if (widget.onConfirmEditing != null) {
+            widget.onConfirmEditing!(confirmEditing);
+          }
         }
       });
     }

@@ -98,6 +98,39 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _handleNodeAdded(String parentNodeId, String newNodeId, String newNodeName) {
+    developer.log('MyHomePage: _handleNodeAdded chamado. parentNodeId: $parentNodeId, newNodeId: $newNodeId, newNodeName: $newNodeName');
+    
+    // Atualiza a raiz para sincronizar com a TreeView
+    setState(() {
+      _rootNode = _addNodeToParent(_rootNode, parentNodeId, newNodeId, newNodeName);
+    });
+  }
+
+  Node _addNodeToParent(Node root, String parentNodeId, String newNodeId, String newNodeName) {
+    // Cria o novo node
+    final newNode = Node(
+      id: newNodeId,
+      name: newNodeName,
+    );
+
+    // Adiciona o novo node como filho do parent
+    Node addChildRecursive(Node node) {
+      if (node.id == parentNodeId) {
+        final newChildren = List<Node>.from(node.children)..add(newNode);
+        return node.copyWith(children: newChildren);
+      }
+
+      final updatedChildren = node.children
+          .map((child) => addChildRecursive(child))
+          .toList();
+
+      return node.copyWith(children: updatedChildren);
+    }
+
+    return addChildRecursive(root);
+  }
+
   Node _moveNodeToParent(Node root, String draggedNodeId, String newParentId) {
     // Encontra o node a ser movido
     final nodeToMove = root.findById(draggedNodeId);
@@ -257,6 +290,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 onExpansionChanged: _handleExpansionChanged,
                 onNodeReordered: _handleNodeReordered,
                 onNodeParentChanged: _handleNodeParentChanged,
+                onNodeAdded: _handleNodeAdded,
               ),
             ),
           // Janela flutuante com ActionsPanel (sempre visível)

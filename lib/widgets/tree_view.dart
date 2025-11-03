@@ -12,6 +12,7 @@ class TreeView extends StatefulWidget {
   final Function(String nodeId, bool isExpanded)? onExpansionChanged;
   final Function(String draggedNodeId, String targetNodeId, bool insertBefore)? onNodeReordered;
   final Function(String draggedNodeId, String newParentId)? onNodeParentChanged;
+  final Function(String parentNodeId, String newNodeId, String newNodeName)? onNodeAdded;
 
   const TreeView({
     super.key,
@@ -22,6 +23,7 @@ class TreeView extends StatefulWidget {
     this.onExpansionChanged,
     this.onNodeReordered,
     this.onNodeParentChanged,
+    this.onNodeAdded,
   });
 
   @override
@@ -53,12 +55,28 @@ class _TreeViewState extends State<TreeView> {
   @override
   void didUpdateWidget(TreeView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Sempre sincroniza _rootNode com widget.rootNode para garantir que mudanças do parent sejam refletidas
-    developer.log('TreeView: didUpdateWidget - Sincronizando _rootNode. Root atual: ${_rootNode.name}, Novo root: ${widget.rootNode.name}');
-    if (_rootNode.name != widget.rootNode.name || _rootNode.id != widget.rootNode.id) {
-      developer.log('TreeView: Root mudou! Atualizando _rootNode local.');
+    // Sincroniza _rootNode com widget.rootNode apenas se realmente mudou
+    // Compara a estrutura para evitar sobrescrever mudanças locais não sincronizadas
+    if (!_areTreesEqual(_rootNode, widget.rootNode)) {
+      developer.log('TreeView: didUpdateWidget - Root mudou externamente. Sincronizando.');
+      _rootNode = widget.rootNode;
     }
-    _rootNode = widget.rootNode;
+  }
+
+  // Compara duas árvores para verificar se são iguais (estrutura e conteúdo)
+  bool _areTreesEqual(Node node1, Node node2) {
+    if (node1.id != node2.id || node1.name != node2.name) {
+      return false;
+    }
+    if (node1.children.length != node2.children.length) {
+      return false;
+    }
+    for (int i = 0; i < node1.children.length; i++) {
+      if (!_areTreesEqual(node1.children[i], node2.children[i])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   void _toggleExpand(String nodeId) {
@@ -253,6 +271,81 @@ class _TreeViewState extends State<TreeView> {
       _treeFocusNode.requestFocus();
     });
     developer.log('TreeView: Modo de edição cancelado');
+  }
+
+  void _addNewChild() {
+    if (_selectedNodeId == null || _editingNodeId != null) {
+      print('❌ [TreeView] Nenhum node selecionado ou está editando');
+      return;
+    }
+
+    final parentNode = _rootNode.findById(_selectedNodeId!);
+    if (parentNode == null) {
+      print('❌ [TreeView] Node selecionado não encontrado');
+      return;
+    }
+
+    // Gera um ID único para o novo node
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final newNodeId = 'new_node_$timestamp';
+    final newNodeName = 'Novo Item';
+
+    // Salva o ID do parent antes de mudar a seleção
+    final parentNodeId = _selectedNodeId!;
+
+    // Cria o novo node
+    final newNode = Node(
+      id: newNodeId,
+      name: newNodeName,
+    );
+
+    // Adiciona o novo node como filho do parent
+    Node addChildRecursive(Node node) {
+      if (node.id == parentNodeId) {
+        final newChildren = List<Node>.from(node.children)..add(newNode);
+        return node.copyWith(children: newChildren);
+      }
+
+      final updatedChildren = node.children
+          .map((child) => addChildRecursive(child))
+          .toList();
+
+      return node.copyWith(children: updatedChildren);
+    }
+
+    // Atualiza a árvore primeiro
+    final updatedRoot = addChildRecursive(_rootNode);
+    
+    // Garante que o parent está expandido para mostrar o novo filho
+    final wasExpanded = _expandedNodes.contains(parentNodeId);
+    if (!wasExpanded) {
+      _expandedNodes.add(parentNodeId);
+      // Notifica mudança de expansão
+      if (widget.onExpansionChanged != null) {
+        widget.onExpansionChanged!(parentNodeId, true);
+      }
+    }
+    
+    setState(() {
+      _rootNode = updatedRoot;
+      // Seleciona o novo node (mas não entra em modo de edição)
+      _selectedNodeId = newNodeId;
+    });
+
+    // Notifica callbacks DEPOIS do setState para garantir que o widget seja reconstruído primeiro
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        // Notifica callbacks após o frame ser renderizado
+        if (widget.onSelectionChanged != null) {
+          widget.onSelectionChanged!(newNodeId);
+        }
+        if (widget.onNodeAdded != null) {
+          widget.onNodeAdded!(parentNodeId, newNodeId, newNodeName);
+        }
+      }
+    });
+
+    print('✅ [TreeView] Novo child adicionado: $newNodeId');
   }
 
   // Verifica se são irmãos (mesmo parent) - para determinar se é reordenação
@@ -645,11 +738,12 @@ class _TreeViewState extends State<TreeView> {
       LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowDown): const _CtrlArrowDownIntent(),
     };
     
-    // Só adiciona shortcuts de esquerda/direita se não estiver editando
+    // Só adiciona shortcuts de esquerda/direita e 'n' se não estiver editando
     // Quando está editando, o TextField precisa processar essas teclas
     if (_editingNodeId == null) {
       shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowLeft)] = const _ArrowLeftIntent();
       shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowRight)] = const _ArrowRightIntent();
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.keyN)] = const _AddChildIntent();
     }
     
     return shortcuts;
@@ -760,6 +854,13 @@ class _TreeViewState extends State<TreeView> {
             onInvoke: (_) {
               print('⌨️ [TreeView] CTRL + SETA PARA BAIXO pressionada');
               _navigateToNextNonLeaf();
+              return null;
+            },
+          ),
+          _AddChildIntent: CallbackAction<_AddChildIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] N PRESSIONADO - Adicionar novo child');
+              _addNewChild();
               return null;
             },
           ),
@@ -976,5 +1077,10 @@ class _CtrlArrowUpIntent extends Intent {
 // Intent para navegar para o próximo node não-leaf (Ctrl + ↓)
 class _CtrlArrowDownIntent extends Intent {
   const _CtrlArrowDownIntent();
+}
+
+// Intent para adicionar novo child (N)
+class _AddChildIntent extends Intent {
+  const _AddChildIntent();
 }
 
