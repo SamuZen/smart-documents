@@ -7,9 +7,9 @@ import '../utils/preferences.dart';
 class ProjectService {
   static const String projectFileName = 'project.json';
 
-  /// Cria ou seleciona uma pasta de projeto
+  /// Seleciona a pasta pai onde será criada a pasta do projeto
   /// Retorna o caminho da pasta selecionada, ou null se cancelado
-  static Future<String?> createProjectFolder() async {
+  static Future<String?> selectParentFolder() async {
     try {
       // Tenta obter a última pasta usada
       String? initialDirectory = await Preferences.getLastProjectPath();
@@ -24,9 +24,9 @@ class ProjectService {
         }
       }
 
-      // Abre diálogo para selecionar/criar pasta
+      // Abre diálogo para selecionar pasta pai
       String? selectedDirectory = await FilePicker.platform.getDirectoryPath(
-        dialogTitle: 'Selecione ou crie uma pasta para o projeto',
+        dialogTitle: 'Selecione onde criar a pasta do projeto',
         initialDirectory: initialDirectory,
       );
 
@@ -34,14 +34,68 @@ class ProjectService {
         return null;
       }
 
-      // Salva a pasta selecionada nas preferências
-      await Preferences.setLastProjectPath(selectedDirectory);
-
       return selectedDirectory;
     } catch (e) {
-      print('Erro ao criar/selecionar pasta de projeto: $e');
+      print('Erro ao selecionar pasta pai: $e');
       return null;
     }
+  }
+
+  /// Cria uma pasta de projeto com o nome especificado dentro da pasta pai
+  /// Retorna o caminho completo da pasta criada, ou null se houve erro
+  static Future<String?> createProjectFolder(String projectName, String parentFolder) async {
+    try {
+      // Sanitiza o nome do projeto (remove caracteres inválidos para nome de pasta)
+      final sanitizedName = _sanitizeFolderName(projectName);
+      
+      if (sanitizedName.isEmpty) {
+        print('❌ Nome do projeto inválido após sanitização');
+        return null;
+      }
+
+      // Cria o caminho completo da pasta do projeto
+      final projectFolderPath = '${parentFolder}${Platform.pathSeparator}$sanitizedName';
+      final projectFolder = Directory(projectFolderPath);
+
+      // Verifica se a pasta já existe
+      if (projectFolder.existsSync()) {
+        print('⚠️ A pasta "$sanitizedName" já existe em: $parentFolder');
+        return null; // Ou podemos retornar o caminho mesmo assim, dependendo do comportamento desejado
+      }
+
+      // Cria a pasta do projeto
+      await projectFolder.create(recursive: true);
+
+      // Salva o caminho nas preferências
+      await Preferences.setLastProjectPath(projectFolderPath);
+
+      print('✅ Pasta do projeto criada: $projectFolderPath');
+      return projectFolderPath;
+    } catch (e) {
+      print('❌ Erro ao criar pasta do projeto: $e');
+      return null;
+    }
+  }
+
+  /// Remove caracteres inválidos do nome para usar como nome de pasta
+  static String _sanitizeFolderName(String name) {
+    // Remove caracteres inválidos para nome de pasta
+    final invalidChars = Platform.isWindows
+        ? RegExp(r'[<>:"/\\|?*]')
+        : RegExp(r'[/\\]');
+    
+    // Remove caracteres inválidos e trim
+    var sanitized = name.replaceAll(invalidChars, '_').trim();
+    
+    // Remove espaços no início e fim, e substitui espaços múltiplos por um único espaço
+    sanitized = sanitized.replaceAll(RegExp(r'\s+'), ' ');
+    
+    // Remove pontos finais (podem causar problemas no Windows)
+    if (Platform.isWindows) {
+      sanitized = sanitized.replaceAll(RegExp(r'\.$'), '');
+    }
+    
+    return sanitized;
   }
 
   /// Salva o projeto na pasta especificada

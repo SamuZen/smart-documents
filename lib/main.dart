@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
-import 'dart:io';
 import 'models/node.dart';
-import 'services/node_service.dart';
 import 'services/project_service.dart';
 import 'widgets/tree_view.dart';
 import 'widgets/draggable_resizable_window.dart';
 import 'widgets/actions_panel.dart';
 import 'widgets/menu_bar.dart';
-import 'widgets/confirmation_dialog.dart';
 import 'screens/welcome_screen.dart';
 
 void main() {
@@ -291,13 +288,6 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  void _markProjectAsSaved() {
-    if (_hasUnsavedChanges) {
-      setState(() {
-        _hasUnsavedChanges = false;
-      });
-    }
-  }
 
   bool _checkUnsavedChanges() {
     return _hasUnsavedChanges;
@@ -359,24 +349,78 @@ class _MyHomePageState extends State<MyHomePage> {
       return; // Usuário cancelou
     }
 
-    // Solicita pasta do projeto
-    final projectPath = await ProjectService.createProjectFolder();
-    if (projectPath == null) {
+    // Solicita nome do projeto
+    final projectName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        final textController = TextEditingController();
+        return AlertDialog(
+          title: const Text('Novo Projeto'),
+          content: TextField(
+            controller: textController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nome do projeto',
+              hintText: 'Digite o nome do projeto',
+            ),
+            onSubmitted: (value) {
+              if (value.trim().isNotEmpty) {
+                Navigator.of(dialogContext).pop(value.trim());
+              }
+            },
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = textController.text.trim();
+                if (name.isNotEmpty) {
+                  Navigator.of(dialogContext).pop(name);
+                }
+              },
+              child: const Text('Criar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (projectName == null || projectName.isEmpty) {
+      return; // Usuário cancelou ou nome vazio
+    }
+
+    // Solicita pasta pai onde criar o projeto
+    final parentFolder = await ProjectService.selectParentFolder();
+    if (parentFolder == null) {
       return; // Usuário cancelou
     }
 
-    // Cria novo projeto vazio
+    // Cria a pasta do projeto
+    final projectPath = await ProjectService.createProjectFolder(projectName, parentFolder);
+    if (projectPath == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao criar pasta do projeto. A pasta já existe ou nome inválido.')),
+        );
+      }
+      return;
+    }
+
+    // Cria novo projeto com o nome especificado
     final newRootNode = Node(
       id: 'root',
-      name: 'Novo Projeto',
+      name: projectName,
     );
 
-    // Salva o projeto vazio
+    // Salva o projeto
     final saved = await ProjectService.saveProject(projectPath, newRootNode);
     if (!saved) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao criar projeto')),
+          const SnackBar(content: Text('Erro ao salvar projeto')),
         );
       }
       return;
@@ -394,7 +438,7 @@ class _MyHomePageState extends State<MyHomePage> {
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Projeto criado com sucesso')),
+        SnackBar(content: Text('Projeto "$projectName" criado com sucesso')),
       );
     }
   }
@@ -442,10 +486,69 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _handleSaveProject() async {
     if (_currentProjectPath == null) {
-      // Se não tem projeto salvo, pede para criar novo
-      final projectPath = await ProjectService.createProjectFolder();
-      if (projectPath == null) {
+      // Se não tem projeto salvo, pede nome e cria novo
+      final projectName = await showDialog<String>(
+        context: context,
+        builder: (BuildContext dialogContext) {
+          final textController = TextEditingController(text: _rootNode.name);
+          return AlertDialog(
+            title: const Text('Salvar Projeto'),
+            content: TextField(
+              controller: textController,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Nome do projeto',
+                hintText: 'Digite o nome do projeto',
+              ),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  Navigator.of(dialogContext).pop(value.trim());
+                }
+              },
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final name = textController.text.trim();
+                  if (name.isNotEmpty) {
+                    Navigator.of(dialogContext).pop(name);
+                  }
+                },
+                child: const Text('Salvar'),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (projectName == null || projectName.isEmpty) {
+        return; // Usuário cancelou ou nome vazio
+      }
+
+      // Atualiza o nome do projeto na raiz
+      setState(() {
+        _rootNode = _rootNode.copyWith(name: projectName);
+      });
+
+      // Solicita pasta pai onde criar o projeto
+      final parentFolder = await ProjectService.selectParentFolder();
+      if (parentFolder == null) {
         return; // Usuário cancelou
+      }
+
+      // Cria a pasta do projeto
+      final projectPath = await ProjectService.createProjectFolder(projectName, parentFolder);
+      if (projectPath == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao criar pasta do projeto. A pasta já existe ou nome inválido.')),
+          );
+        }
+        return;
       }
 
       final saved = await ProjectService.saveProject(projectPath, _rootNode);
