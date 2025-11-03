@@ -139,5 +139,28 @@ class Node {
       children: children ?? this.children.map((e) => e.copyWith()).toList(),
     );
   }
+
+  /// Converte o Node para JSON recursivamente
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'children': children.map((child) => child.toJson()).toList(),
+    };
+  }
+
+  /// Cria um Node a partir de JSON
+  static Node fromJson(Map<String, dynamic> json) {
+    final childrenJson = json['children'] as List<dynamic>? ?? [];
+    final children = childrenJson
+        .map((childJson) => Node.fromJson(childJson as Map<String, dynamic>))
+        .toList();
+
+    return Node(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      children: children,
+    );
+  }
 }
 
