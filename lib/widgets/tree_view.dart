@@ -47,6 +47,24 @@ class _TreeViewState extends State<TreeView> {
   void initState() {
     super.initState();
     _rootNode = widget.rootNode;
+    // Expande todos os nodes ao inicializar
+    _expandAllNodes();
+  }
+
+  /// Expande todos os nodes recursivamente
+  void _expandAllNodes() {
+    void expandNodeRecursive(Node node) {
+      // Se o node tem filhos, adiciona ao set de expandidos
+      if (node.children.isNotEmpty) {
+        _expandedNodes.add(node.id);
+        // Expande recursivamente os filhos
+        for (final child in node.children) {
+          expandNodeRecursive(child);
+        }
+      }
+    }
+    
+    expandNodeRecursive(_rootNode);
   }
 
   @override
@@ -63,6 +81,8 @@ class _TreeViewState extends State<TreeView> {
     if (!_areTreesEqual(_rootNode, widget.rootNode)) {
       developer.log('TreeView: didUpdateWidget - Root mudou externamente. Sincronizando.');
       _rootNode = widget.rootNode;
+      // Expande todos os nodes quando a árvore é atualizada
+      _expandAllNodes();
     }
   }
 
