@@ -878,21 +878,14 @@ class _TreeViewState extends State<TreeView> {
       LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowDown): const _CtrlArrowDownIntent(),
     };
     
-    // Só adiciona shortcuts de esquerda/direita, 'n' e Delete se não estiver editando
+    // Só adiciona shortcuts de esquerda/direita se não estiver editando
     // Quando está editando, o TextField precisa processar essas teclas
+    // NOTA: 'n', Delete, Backspace, Ctrl+Z, Ctrl+Y agora são gerenciados globalmente em main.dart
+    // para garantir funcionamento consistente em toda a aplicação
     if (_editingNodeId == null) {
       shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowLeft)] = const _ArrowLeftIntent();
       shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowRight)] = const _ArrowRightIntent();
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.keyN)] = const _AddChildIntent();
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.delete)] = const _DeleteNodeIntent();
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.backspace)] = const _DeleteNodeIntent(); // Backspace também deleta
     }
-    
-    // Atalhos de undo/redo (sempre disponíveis, mesmo durante edição)
-    // Quando está editando, o TextField pode capturar essas teclas, mas tentamos processar primeiro
-    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ)] = const _UndoIntent();
-    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY)] = const _RedoIntent();
-    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ)] = const _RedoIntent(); // Ctrl+Shift+Z também é redo
     
     return shortcuts;
   }
@@ -1005,38 +998,8 @@ class _TreeViewState extends State<TreeView> {
               return null;
             },
           ),
-          _AddChildIntent: CallbackAction<_AddChildIntent>(
-            onInvoke: (_) {
-              print('⌨️ [TreeView] N PRESSIONADO - Adicionar novo child');
-              _addNewChild();
-              return null;
-            },
-          ),
-          _DeleteNodeIntent: CallbackAction<_DeleteNodeIntent>(
-            onInvoke: (_) {
-              print('⌨️ [TreeView] DELETE PRESSIONADO - Deletar node');
-              _deleteSelectedNode();
-              return null;
-            },
-          ),
-          _UndoIntent: CallbackAction<_UndoIntent>(
-            onInvoke: (_) {
-              print('⌨️ [TreeView] CTRL+Z PRESSIONADO - Undo');
-              if (widget.onUndo != null) {
-                widget.onUndo!();
-              }
-              return null;
-            },
-          ),
-          _RedoIntent: CallbackAction<_RedoIntent>(
-            onInvoke: (_) {
-              print('⌨️ [TreeView] CTRL+Y PRESSIONADO - Redo');
-              if (widget.onRedo != null) {
-                widget.onRedo!();
-              }
-              return null;
-            },
-          ),
+          // NOTA: AddChild, DeleteNode, Undo, Redo foram movidos para o nível global (main.dart)
+          // para garantir funcionamento consistente em toda a aplicação
         },
         child: Focus(
           focusNode: _treeFocusNode,
@@ -1252,23 +1215,6 @@ class _CtrlArrowDownIntent extends Intent {
   const _CtrlArrowDownIntent();
 }
 
-// Intent para adicionar novo child (N)
-class _AddChildIntent extends Intent {
-  const _AddChildIntent();
-}
-
-// Intent para deletar node (Delete/Backspace)
-class _DeleteNodeIntent extends Intent {
-  const _DeleteNodeIntent();
-}
-
-// Intent para undo (Ctrl+Z)
-class _UndoIntent extends Intent {
-  const _UndoIntent();
-}
-
-// Intent para redo (Ctrl+Y ou Ctrl+Shift+Z)
-class _RedoIntent extends Intent {
-  const _RedoIntent();
-}
+// NOTA: Intents de AddChild, DeleteNode, Undo, Redo foram movidos para main.dart
+// como intents globais para garantir funcionamento consistente em toda a aplicação
 

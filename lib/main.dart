@@ -18,6 +18,7 @@ import 'widgets/actions_panel.dart';
 import 'widgets/document_editor.dart';
 import 'widgets/menu_bar.dart';
 import 'widgets/checkpoint_dialog.dart';
+import 'widgets/confirmation_dialog.dart';
 import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
 import 'commands/set_node_field_command.dart';
@@ -71,6 +72,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final CommandRegistry _commandRegistry = CommandRegistry.instance;
   String? _undoDescription;
   String? _redoDescription;
+  
+  // FocusNode principal para capturar atalhos globais
+  final FocusNode _mainFocusNode = FocusNode();
 
   @override
   void initState() {
@@ -83,6 +87,21 @@ class _MyHomePageState extends State<MyHomePage> {
 
     // Inicializa sistema de comandos
     _initializeCommandSystem();
+    
+    // Garante que o foco principal está solicitado após o primeiro frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_mainFocusNode.hasFocus) {
+        print('✅ [Main] Solicitando foco principal no initState');
+        developer.log('Main: Solicitando foco principal no initState');
+        _mainFocusNode.requestFocus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _mainFocusNode.dispose();
+    super.dispose();
   }
 
   void _initializeCommandSystem() {
@@ -234,6 +253,71 @@ class _MyHomePageState extends State<MyHomePage> {
     );
     
     await _commandHistory.execute(command, _rootNode);
+  }
+
+  void _handleAddNodeShortcut() {
+    // Este método é chamado quando 'n' é pressionado globalmente
+    // Cria um novo node filho do node selecionado
+    if (_selectedNodeId == null || _isEditing) {
+      return;
+    }
+
+    final parentNode = _rootNode.findById(_selectedNodeId!);
+    if (parentNode == null) {
+      return;
+    }
+
+    // Gera um ID único para o novo node
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final newNodeId = 'new_node_$timestamp';
+    final newNodeName = 'Novo Item';
+
+    // Cria o novo node através do comando
+    _handleNodeAdded(_selectedNodeId!, newNodeId, newNodeName);
+  }
+
+  void _handleDeleteNodeShortcut() {
+    // Este método é chamado quando Delete/Backspace é pressionado globalmente
+    // Deleta o node selecionado (com confirmação)
+    if (_selectedNodeId == null || _isEditing) {
+      return;
+    }
+
+    final nodeToDelete = _rootNode.findById(_selectedNodeId!);
+    if (nodeToDelete == null) {
+      return;
+    }
+
+    // Não permite deletar a raiz
+    if (_selectedNodeId == _rootNode.id) {
+      return;
+    }
+
+    // Conta quantos descendentes o node tem
+    final descendantCount = nodeToDelete.countAllDescendants();
+    
+    // Formata a mensagem de confirmação
+    String message;
+    if (descendantCount == 0) {
+      message = 'Você quer deletar o node "${nodeToDelete.name}"?';
+    } else {
+      final childText = descendantCount == 1 ? 'child node' : 'child nodes';
+      message = 'Você quer deletar o node "${nodeToDelete.name}"? Irá deletar também $descendantCount $childText.';
+    }
+
+    // Mostra dialog de confirmação
+    ConfirmationDialog.show(
+      context: context,
+      title: 'Confirmar deleção',
+      message: message,
+      confirmText: 'Deletar',
+      cancelText: 'Cancelar',
+      isDestructive: true,
+      onConfirm: () {
+        // Usuário confirmou, deleta o node
+        _handleNodeDeleted(_selectedNodeId!);
+      },
+    );
   }
 
   void _handleNodeDeleted(String deletedNodeId) async {
@@ -1012,29 +1096,140 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // Atalhos globais - sempre funcionam, mesmo com TextFields focados
+    // Usa excludeMode: true para garantir que comandos funcionem mesmo quando editando
     return Shortcuts(
       shortcuts: {
+        // Undo/Redo - sempre disponíveis
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _GlobalUndoIntent(),
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _GlobalRedoIntent(),
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _GlobalRedoIntent(),
+        // Adicionar node - só funciona quando não está editando
+        LogicalKeySet(LogicalKeyboardKey.keyN): const _AddNodeGlobalIntent(),
+        // Deletar node - só funciona quando não está editando
+        LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
+        LogicalKeySet(LogicalKeyboardKey.backspace): const _DeleteNodeGlobalIntent(),
       },
       child: Actions(
         actions: {
           _GlobalUndoIntent: CallbackAction<_GlobalUndoIntent>(
             onInvoke: (_) {
+              print('⌨️ [Main] CTRL+Z PRESSIONADO GLOBALMENTE');
+              print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
+              print('   _isEditing: $_isEditing');
+              developer.log('Main: Ctrl+Z pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing');
+              
+              // Verifica o foco atual
+              final focusScope = FocusScope.of(context);
+              final focusedChild = focusScope.focusedChild;
+              print('   focusedChild: ${focusedChild?.runtimeType}');
+              developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
+              
+              // Undo sempre funciona, mesmo durante edição
               _handleUndo();
               return null;
             },
           ),
           _GlobalRedoIntent: CallbackAction<_GlobalRedoIntent>(
             onInvoke: (_) {
+              print('⌨️ [Main] CTRL+Y PRESSIONADO GLOBALMENTE');
+              print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
+              print('   _isEditing: $_isEditing');
+              developer.log('Main: Ctrl+Y pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing');
+              
+              // Verifica o foco atual
+              final focusScope = FocusScope.of(context);
+              final focusedChild = focusScope.focusedChild;
+              print('   focusedChild: ${focusedChild?.runtimeType}');
+              developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
+              
+              // Redo sempre funciona, mesmo durante edição
               _handleRedo();
+              return null;
+            },
+          ),
+          _AddNodeGlobalIntent: CallbackAction<_AddNodeGlobalIntent>(
+            onInvoke: (_) {
+              print('⌨️ [Main] N PRESSIONADO GLOBALMENTE');
+              print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
+              print('   _isEditing: $_isEditing');
+              print('   _selectedNodeId: $_selectedNodeId');
+              print('   _showWindow: $_showWindow');
+              developer.log('Main: N pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId');
+              
+              // Verifica o foco atual
+              final focusScope = FocusScope.of(context);
+              final focusedChild = focusScope.focusedChild;
+              print('   focusedChild: ${focusedChild?.runtimeType}');
+              developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
+              
+              // Só adiciona node se não estiver editando e houver um node selecionado
+              if (!_isEditing && _selectedNodeId != null && _showWindow) {
+                print('✅ [Main] Condições OK, adicionando node');
+                _handleAddNodeShortcut();
+              } else {
+                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _showWindow=$_showWindow');
+              }
+              return null;
+            },
+          ),
+          _DeleteNodeGlobalIntent: CallbackAction<_DeleteNodeGlobalIntent>(
+            onInvoke: (_) {
+              print('⌨️ [Main] DELETE PRESSIONADO GLOBALMENTE');
+              print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
+              print('   _isEditing: $_isEditing');
+              print('   _selectedNodeId: $_selectedNodeId');
+              print('   _showWindow: $_showWindow');
+              developer.log('Main: Delete pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing');
+              
+              // Verifica o foco atual
+              final focusScope = FocusScope.of(context);
+              final focusedChild = focusScope.focusedChild;
+              print('   focusedChild: ${focusedChild?.runtimeType}');
+              developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
+              
+              // Só deleta se não estiver editando e houver um node selecionado
+              if (!_isEditing && _selectedNodeId != null && _showWindow) {
+                print('✅ [Main] Condições OK, deletando node');
+                _handleDeleteNodeShortcut();
+              } else {
+                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _showWindow=$_showWindow');
+              }
               return null;
             },
           ),
         },
         child: Focus(
+          focusNode: _mainFocusNode,
           autofocus: true,
+          onFocusChange: (hasFocus) {
+            print('🔍 [Main] Foco principal mudou: hasFocus=$hasFocus');
+            developer.log('Main: Foco principal mudou. hasFocus=$hasFocus');
+            
+            // Se o foco principal foi perdido e não há outro foco ativo,
+            // tenta recuperá-lo após um pequeno delay
+            if (!hasFocus) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                // Verifica se nenhum outro widget tem foco
+                final focusScope = FocusScope.of(context);
+                final focusedChild = focusScope.focusedChild;
+                print('🔍 [Main] Verificando foco após perder: focusedChild=${focusedChild?.runtimeType}');
+                developer.log('Main: Verificando foco após perder. focusedChild=${focusedChild?.runtimeType}');
+                
+                if (focusedChild == null && mounted) {
+                  print('✅ [Main] Nenhum widget focado, recuperando foco principal');
+                  developer.log('Main: Nenhum widget focado, recuperando foco principal');
+                  _mainFocusNode.requestFocus();
+                } else {
+                  print('⚠️ [Main] Outro widget está focado: ${focusedChild?.runtimeType}');
+                  developer.log('Main: Outro widget está focado: ${focusedChild?.runtimeType}');
+                }
+              });
+            } else {
+              print('✅ [Main] Foco principal recuperado');
+              developer.log('Main: Foco principal recuperado');
+            }
+          },
           child: Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
@@ -1194,6 +1389,13 @@ class _MyHomePageState extends State<MyHomePage> {
                               _showWindow = false;
                             });
                           },
+                          onTap: () {
+                            // Retorna foco ao widget principal quando clica na janela
+                            if (!_mainFocusNode.hasFocus) {
+                              print('🖱️ [Main] Clique na janela Navegação, retornando foco');
+                              _mainFocusNode.requestFocus();
+                            }
+                          },
                           child: TreeView(
                             rootNode: _rootNode,
                             onNodeNameChanged: _updateRootNode,
@@ -1204,8 +1406,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             onNodeParentChanged: _handleNodeParentChanged,
                             onNodeAdded: _handleNodeAdded,
                             onNodeDeleted: _handleNodeDeleted,
-                            onUndo: _handleUndo,
-                            onRedo: _handleRedo,
+                            // onUndo e onRedo removidos - agora são gerenciados globalmente
                           ),
                         ),
                       // Janela flutuante com ActionsPanel (sempre visível)
@@ -1220,6 +1421,13 @@ class _MyHomePageState extends State<MyHomePage> {
                             setState(() {
                               _showActionsWindow = false;
                             });
+                          },
+                          onTap: () {
+                            // Retorna foco ao widget principal quando clica na janela
+                            if (!_mainFocusNode.hasFocus) {
+                              print('🖱️ [Main] Clique na janela Ações, retornando foco');
+                              _mainFocusNode.requestFocus();
+                            }
                           },
                           child: ActionsPanel(
                             selectedNode: _getSelectedNode(),
@@ -1240,11 +1448,23 @@ class _MyHomePageState extends State<MyHomePage> {
                               _showDocumentEditor = false;
                             });
                           },
+                          onTap: () {
+                            // Retorna foco ao widget principal quando clica na janela (mas não nos campos)
+                            // Isso é tratado pelo DocumentEditor também, mas aqui é uma segunda camada
+                            final focusScope = FocusScope.of(context);
+                            final hasTextFieldFocused = focusScope.focusedChild?.runtimeType.toString().contains('TextField') ?? false;
+                            
+                            if (!hasTextFieldFocused && !_mainFocusNode.hasFocus) {
+                              print('🖱️ [Main] Clique na janela Editor de Documento (fora dos campos), retornando foco');
+                              _mainFocusNode.requestFocus();
+                            }
+                          },
                           child: DocumentEditor(
                             selectedNode: _getSelectedNode(),
                             onFieldChanged: _handleFieldChanged,
                             onFieldRemoved: _handleFieldRemoved,
                             onFieldAdded: _handleFieldAdded,
+                            mainAppFocusNode: _mainFocusNode,
                           ),
                         ),
                     ],
@@ -1267,4 +1487,14 @@ class _GlobalUndoIntent extends Intent {
 // Intent para redo global (Ctrl+Y ou Ctrl+Shift+Z)
 class _GlobalRedoIntent extends Intent {
   const _GlobalRedoIntent();
+}
+
+// Intent para adicionar node globalmente (N)
+class _AddNodeGlobalIntent extends Intent {
+  const _AddNodeGlobalIntent();
+}
+
+// Intent para deletar node globalmente (Delete/Backspace)
+class _DeleteNodeGlobalIntent extends Intent {
+  const _DeleteNodeGlobalIntent();
 }

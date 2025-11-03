@@ -8,6 +8,7 @@ class DocumentEditor extends StatefulWidget {
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldChanged;
   final Function(String nodeId, String fieldKey) onFieldRemoved;
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldAdded;
+  final FocusNode? mainAppFocusNode; // FocusNode principal da aplicação para devolver o foco
 
   const DocumentEditor({
     super.key,
@@ -15,6 +16,7 @@ class DocumentEditor extends StatefulWidget {
     required this.onFieldChanged,
     required this.onFieldRemoved,
     required this.onFieldAdded,
+    this.mainAppFocusNode,
   });
 
   @override
@@ -28,16 +30,113 @@ class _DocumentEditorState extends State<DocumentEditor> {
   String _newFieldType = 'String';
   final TextEditingController _newFieldKeyController = TextEditingController();
   final TextEditingController _newFieldValueController = TextEditingController();
+  late final FocusNode _newFieldKeyFocusNode;
   late final FocusNode _newFieldValueFocusNode;
 
   @override
   void initState() {
     super.initState();
-    _newFieldValueFocusNode = FocusNode()..addListener(() {
+    _newFieldKeyFocusNode = FocusNode()..addListener(() {
       if (mounted) {
-        setState(() {}); // Atualiza visual quando foco muda
+        final hasFocus = _newFieldKeyFocusNode.hasFocus;
+        print('🔄 [DocumentEditor] Campo "Nome do campo" foco mudou: hasFocus=$hasFocus');
+        
+        if (!hasFocus) {
+          // Se o campo de nome perdeu o foco, verifica se devolve para o widget principal
+          print('   Campo "Nome do campo" perdeu foco');
+          _returnFocusToMain();
+        }
       }
     });
+    _newFieldValueFocusNode = FocusNode()..addListener(() {
+      if (mounted) {
+        final hasFocus = _newFieldValueFocusNode.hasFocus;
+        print('🔄 [DocumentEditor] Campo "Valor inicial" foco mudou: hasFocus=$hasFocus');
+        
+        setState(() {}); // Atualiza visual quando foco muda
+        if (!hasFocus) {
+          // Se o campo de valor inicial perdeu o foco, devolve para o widget principal
+          print('   Campo "Valor inicial" perdeu foco');
+          _returnFocusToMain();
+        }
+      }
+    });
+  }
+
+  /// Devolve o foco para o widget principal quando nenhum campo está focado
+  void _returnFocusToMain() {
+    print('🔄 [DocumentEditor] _returnFocusToMain chamado');
+    
+    // Verifica se algum campo ainda está focado
+    final hasExistingFieldFocused = _focusNodes.values.any((node) => node.hasFocus);
+    final hasNewKeyFocused = _newFieldKeyFocusNode.hasFocus;
+    final hasNewValueFocused = _newFieldValueFocusNode.hasFocus;
+    final hasAnyFieldFocused = hasExistingFieldFocused || hasNewKeyFocused || hasNewValueFocused;
+    
+    print('   Campos existentes focados: $hasExistingFieldFocused');
+    print('   Campo "Nome" focado: $hasNewKeyFocused');
+    print('   Campo "Valor inicial" focado: $hasNewValueFocused');
+    print('   Algum campo focado: $hasAnyFieldFocused');
+    
+    if (!hasAnyFieldFocused && mounted) {
+      print('✅ [DocumentEditor] Nenhum campo focado, devolvendo foco ao widget principal');
+      
+      // Nenhum campo está focado, devolve o foco para o widget principal
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          print('🔄 [DocumentEditor] Executando unfocus no próximo frame');
+          
+          // Primeiro, remove o foco de todos os campos explicitamente
+          for (final focusNode in _focusNodes.values) {
+            if (focusNode.hasFocus) {
+              focusNode.unfocus();
+            }
+          }
+          if (_newFieldKeyFocusNode.hasFocus) {
+            _newFieldKeyFocusNode.unfocus();
+          }
+          if (_newFieldValueFocusNode.hasFocus) {
+            _newFieldValueFocusNode.unfocus();
+          }
+          
+          // Usa FocusScope para unfocus todos os campos
+          FocusScope.of(context).unfocus();
+          
+          // Verifica o estado atual antes de solicitar foco no principal
+          final focusScope = FocusScope.of(context);
+          final focusedBefore = focusScope.focusedChild;
+          final primaryFocus = FocusManager.instance.primaryFocus;
+          print('   Foco antes: ${focusedBefore?.runtimeType}, primaryFocus: ${primaryFocus?.runtimeType}');
+          
+          // Solicita explicitamente o foco no FocusNode principal da aplicação
+          if (widget.mainAppFocusNode != null && !widget.mainAppFocusNode!.hasFocus) {
+            print('✅ [DocumentEditor] Solicitando foco explicitamente no mainAppFocusNode');
+            widget.mainAppFocusNode!.requestFocus();
+            
+            // Verifica após solicitar foco
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                final focusedAfter = focusScope.focusedChild;
+                final primaryFocusAfter = FocusManager.instance.primaryFocus;
+                print('   Foco após solicitar: ${focusedAfter?.runtimeType}, primaryFocus: ${primaryFocusAfter?.runtimeType}');
+                print('   mainAppFocusNode.hasFocus: ${widget.mainAppFocusNode?.hasFocus}');
+                if (widget.mainAppFocusNode?.hasFocus == true) {
+                  print('✅ [DocumentEditor] Foco devolvido com sucesso ao mainAppFocusNode');
+                } else {
+                  print('⚠️ [DocumentEditor] mainAppFocusNode ainda não tem foco');
+                }
+              }
+            });
+          } else if (widget.mainAppFocusNode == null) {
+            print('⚠️ [DocumentEditor] mainAppFocusNode não fornecido, usando apenas unfocus');
+          } else {
+            print('✅ [DocumentEditor] mainAppFocusNode já tem foco');
+          }
+        }
+      });
+    } else {
+      print('⏸️ [DocumentEditor] Ainda há campos focados, não devolvendo foco');
+    }
   }
 
   @override
@@ -45,6 +144,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
     _disposeControllers();
     _newFieldKeyController.dispose();
     _newFieldValueController.dispose();
+    _newFieldKeyFocusNode.dispose();
     _newFieldValueFocusNode.dispose();
     super.dispose();
   }
@@ -155,10 +255,16 @@ class _DocumentEditorState extends State<DocumentEditor> {
         // Adiciona listener para salvar quando perder foco e atualizar visual
         _focusNodes[key]!.addListener(() {
           if (mounted) {
+            final hasFocus = _focusNodes[key]!.hasFocus;
+            print('🔄 [DocumentEditor] Campo "$key" foco mudou: hasFocus=$hasFocus');
+            
             setState(() {}); // Atualiza visual quando foco muda
-            if (!_focusNodes[key]!.hasFocus) {
+            if (!hasFocus) {
               // Perdeu foco, confirma a edição
+              print('   Campo "$key" perdeu foco, confirmando edição');
               _confirmFieldEdit(key);
+              // Se nenhum campo está focado, devolve o foco para o widget principal
+              _returnFocusToMain();
             }
           }
         });
@@ -363,9 +469,17 @@ class _DocumentEditorState extends State<DocumentEditor> {
                 
                 // Adiciona listener para salvar quando perder foco
                 _focusNodes[key]!.addListener(() {
-                  if (!_focusNodes[key]!.hasFocus) {
-                    // Perdeu foco, confirma a edição
-                    _confirmFieldEdit(key);
+                  if (mounted) {
+                    final hasFocus = _focusNodes[key]!.hasFocus;
+                    print('🔄 [DocumentEditor] Campo "$key" (build) foco mudou: hasFocus=$hasFocus');
+                    
+                    if (!hasFocus) {
+                      // Perdeu foco, confirma a edição
+                      print('   Campo "$key" perdeu foco, confirmando edição');
+                      _confirmFieldEdit(key);
+                      // Se nenhum campo está focado, devolve o foco para o widget principal
+                      _returnFocusToMain();
+                    }
                   }
                 });
               }
@@ -463,6 +577,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
           // Nome do campo
           TextField(
             controller: _newFieldKeyController,
+            focusNode: _newFieldKeyFocusNode,
             decoration: const InputDecoration(
               labelText: 'Nome do campo',
               hintText: 'Ex: descrição, autor, data',
