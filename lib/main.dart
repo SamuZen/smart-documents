@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
 import 'models/node.dart';
 import 'services/project_service.dart';
@@ -1011,7 +1012,30 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _GlobalUndoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _GlobalRedoIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _GlobalRedoIntent(),
+      },
+      child: Actions(
+        actions: {
+          _GlobalUndoIntent: CallbackAction<_GlobalUndoIntent>(
+            onInvoke: (_) {
+              _handleUndo();
+              return null;
+            },
+          ),
+          _GlobalRedoIntent: CallbackAction<_GlobalRedoIntent>(
+            onInvoke: (_) {
+              _handleRedo();
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(_getWindowTitle()),
@@ -1228,6 +1252,19 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
         ],
       ),
+          ),
+        ),
+      ),
     );
   }
+}
+
+// Intent para undo global (Ctrl+Z)
+class _GlobalUndoIntent extends Intent {
+  const _GlobalUndoIntent();
+}
+
+// Intent para redo global (Ctrl+Y ou Ctrl+Shift+Z)
+class _GlobalRedoIntent extends Intent {
+  const _GlobalRedoIntent();
 }
