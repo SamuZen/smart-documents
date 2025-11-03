@@ -888,12 +888,11 @@ class _TreeViewState extends State<TreeView> {
       shortcuts[LogicalKeySet(LogicalKeyboardKey.backspace)] = const _DeleteNodeIntent(); // Backspace também deleta
     }
     
-    // Atalhos de undo/redo (sempre disponíveis, exceto quando editando)
-    if (_editingNodeId == null) {
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ)] = const _UndoIntent();
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY)] = const _RedoIntent();
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ)] = const _RedoIntent(); // Ctrl+Shift+Z também é redo
-    }
+    // Atalhos de undo/redo (sempre disponíveis, mesmo durante edição)
+    // Quando está editando, o TextField pode capturar essas teclas, mas tentamos processar primeiro
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ)] = const _UndoIntent();
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY)] = const _RedoIntent();
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ)] = const _RedoIntent(); // Ctrl+Shift+Z também é redo
     
     return shortcuts;
   }
