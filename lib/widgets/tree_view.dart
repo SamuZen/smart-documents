@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
 import '../models/node.dart';
 import 'tree_node_tile.dart';
+import 'confirmation_dialog.dart';
 
 class TreeView extends StatefulWidget {
   final Node rootNode;
@@ -382,8 +383,38 @@ class _TreeViewState extends State<TreeView> {
       return;
     }
 
-    final deletedNodeId = _selectedNodeId!;
+    // Conta quantos descendentes o node tem
+    final descendantCount = nodeToDelete.countAllDescendants();
+    
+    // Formata a mensagem de confirmação
+    String message;
+    if (descendantCount == 0) {
+      message = 'Você quer deletar o node "${nodeToDelete.name}"?';
+    } else {
+      final childText = descendantCount == 1 ? 'child node' : 'child nodes';
+      message = 'Você quer deletar o node "${nodeToDelete.name}"? Irá deletar também $descendantCount $childText.';
+    }
 
+    // Obtém o BuildContext através do widget
+    // Usa o contexto do widget atual através do mounted check
+    if (!mounted) return;
+    
+    final context = this.context;
+    
+    ConfirmationDialog.show(
+      context: context,
+      title: 'Confirmar deleção',
+      message: message,
+      confirmText: 'Deletar',
+      cancelText: 'Cancelar',
+      isDestructive: true,
+      onConfirm: () {
+        _performDelete(nodeToDelete.id);
+      },
+    );
+  }
+
+  void _performDelete(String deletedNodeId) {
     // Remove o node da árvore
     Node removeNodeRecursive(Node node) {
       // Filtra os filhos removendo o node a ser deletado
