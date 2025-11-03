@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:developer' as developer;
 import 'models/node.dart';
 import 'services/node_service.dart';
 import 'widgets/tree_view.dart';
@@ -33,13 +34,40 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late final Node _rootNode;
+  late Node _rootNode;
   bool _showWindow = true;
 
   @override
   void initState() {
     super.initState();
     _rootNode = NodeService.createExampleStructure();
+  }
+
+  void _updateRootNode(String nodeId, String newName) {
+    developer.log('MyHomePage: _updateRootNode chamado. nodeId: $nodeId, newName: "$newName"');
+    final oldName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
+    developer.log('MyHomePage: Nome antigo do node: "$oldName"');
+    
+    setState(() {
+      _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
+    });
+    
+    final updatedName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
+    developer.log('MyHomePage: Após atualização, nome do node: "$updatedName"');
+  }
+
+  Node _updateNodeInTree(Node node, String nodeId, String newName) {
+    developer.log('MyHomePage: _updateNodeInTree - node.id: ${node.id}, procurando: $nodeId');
+    if (node.id == nodeId) {
+      developer.log('MyHomePage: Node encontrado! Atualizando nome de "${node.name}" para "$newName"');
+      return node.copyWith(name: newName);
+    }
+    
+    final updatedChildren = node.children.map((child) {
+      return _updateNodeInTree(child, nodeId, newName);
+    }).toList();
+    
+    return node.copyWith(children: updatedChildren);
   }
 
   @override
@@ -96,7 +124,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   _showWindow = false;
                 });
               },
-              child: TreeView(rootNode: _rootNode),
+              child: TreeView(
+                rootNode: _rootNode,
+                onNodeNameChanged: _updateRootNode,
+              ),
             ),
         ],
       ),
