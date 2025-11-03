@@ -8,6 +8,7 @@ class DraggableResizableWindow extends StatefulWidget {
   final double minWidth;
   final double minHeight;
   final VoidCallback? onClose;
+  final VoidCallback? onTap; // Callback quando a janela é clicada (para retornar foco)
 
   const DraggableResizableWindow({
     super.key,
@@ -18,6 +19,7 @@ class DraggableResizableWindow extends StatefulWidget {
     this.minWidth = 200,
     this.minHeight = 200,
     this.onClose,
+    this.onTap,
   });
 
   @override
@@ -499,27 +501,37 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
         Positioned(
           left: _position.dx,
           top: _position.dy,
-          child: Container(
-            width: _width,
-            height: _height,
-            decoration: BoxDecoration(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 10,
-                  spreadRadius: 2,
+          child: GestureDetector(
+            // Captura cliques na janela (mas não interfere com o conteúdo)
+            onTap: () {
+              // Se não está arrastando nem redimensionando, retorna o foco
+              if (!_isDragging && !_isResizing && widget.onTap != null) {
+                print('🖱️ [DraggableResizableWindow] Janela "${widget.title}" clicada, retornando foco');
+                widget.onTap!();
+              }
+            },
+            behavior: HitTestBehavior.translucent,
+            child: Container(
+              width: _width,
+              height: _height,
+              decoration: BoxDecoration(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 10,
+                    spreadRadius: 2,
+                  ),
+                ],
+                border: Border.all(
+                  color: _currentDockZone != null
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).dividerColor,
+                  width: _currentDockZone != null ? 2 : 1,
                 ),
-              ],
-              border: Border.all(
-                color: _currentDockZone != null
-                    ? Theme.of(context).colorScheme.primary
-                    : Theme.of(context).dividerColor,
-                width: _currentDockZone != null ? 2 : 1,
               ),
-            ),
-        child: Stack(
+              child: Stack(
           children: [
             Column(
               children: [
@@ -609,9 +621,10 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                   ),
                 ),
               ),
+              ),
+            ],
+          ),
             ),
-          ],
-        ),
           ),
         ),
         // Indicador visual de zona de dock - DEPOIS da janela para não interferir

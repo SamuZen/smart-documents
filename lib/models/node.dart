@@ -2,12 +2,15 @@ class Node {
   final String id;
   final String name;
   final List<Node> children;
+  final Map<String, dynamic> fields; // Campos personalizados do documento
 
   Node({
     required this.id,
     required this.name,
     List<Node>? children,
-  }) : children = children ?? [];
+    Map<String, dynamic>? fields,
+  }) : children = children ?? [],
+       fields = fields ?? {};
 
   /// Verifica se o node é uma folha (não tem filhos)
   bool get isLeaf => children.isEmpty;
@@ -132,11 +135,13 @@ class Node {
     String? id,
     String? name,
     List<Node>? children,
+    Map<String, dynamic>? fields,
   }) {
     return Node(
       id: id ?? this.id,
       name: name ?? this.name,
       children: children ?? this.children.map((e) => e.copyWith()).toList(),
+      fields: fields ?? Map<String, dynamic>.from(this.fields),
     );
   }
 
@@ -146,6 +151,7 @@ class Node {
       'id': id,
       'name': name,
       'children': children.map((child) => child.toJson()).toList(),
+      'fields': fields,
     };
   }
 
@@ -156,10 +162,13 @@ class Node {
         .map((childJson) => Node.fromJson(childJson as Map<String, dynamic>))
         .toList();
 
+    final fieldsJson = json['fields'] as Map<String, dynamic>? ?? {};
+
     return Node(
       id: json['id'] as String,
       name: json['name'] as String,
       children: children,
+      fields: fieldsJson,
     );
   }
 }

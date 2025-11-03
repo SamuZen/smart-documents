@@ -4,6 +4,8 @@ import '../commands/add_node_command.dart';
 import '../commands/delete_node_command.dart';
 import '../commands/reorder_node_command.dart';
 import '../commands/move_node_command.dart';
+import '../commands/set_node_field_command.dart';
+import '../commands/remove_node_field_command.dart';
 
 /// Helper para registrar todos os comandos no CommandRegistry
 class CommandRegistryHelper {
@@ -16,6 +18,8 @@ class CommandRegistryHelper {
     registry.registerCommand(DeleteNodeCommand.getMetadata());
     registry.registerCommand(ReorderNodeCommand.getMetadata());
     registry.registerCommand(MoveNodeCommand.getMetadata());
+    registry.registerCommand(SetNodeFieldCommand.getMetadata());
+    registry.registerCommand(RemoveNodeFieldCommand.getMetadata());
     
     print('✅ Todos os comandos foram registrados no CommandRegistry');
   }
