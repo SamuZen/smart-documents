@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import '../models/node.dart';
 import 'tree_node_tile.dart';
 import 'confirmation_dialog.dart';
+import '../theme/app_theme.dart';
 
 class TreeView extends StatefulWidget {
   final Node rootNode;
@@ -1004,9 +1005,14 @@ class _TreeViewState extends State<TreeView> {
         child: Focus(
           focusNode: _treeFocusNode,
           autofocus: true,
-          child: ListView(
-            padding: const EdgeInsets.all(8.0),
-            children: _buildTreeNodes(_rootNode, 0),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceDark,
+            ),
+            child: ListView(
+              padding: const EdgeInsets.all(8.0),
+              children: _buildTreeNodes(_rootNode, 0),
+            ),
           ),
         ),
       ),
@@ -1085,31 +1091,35 @@ class _TreeViewState extends State<TreeView> {
             decoration: BoxDecoration(
               color: isActive && isValid
                   ? (isParentChange 
-                      ? Theme.of(context).colorScheme.secondary.withOpacity(0.15) // Diferente para mudança de parent
-                      : Theme.of(context).colorScheme.primary.withOpacity(0.1)) // Normal para reordenação
+                      ? AppTheme.neonCyan.withOpacity(0.15) // Diferente para mudança de parent
+                      : AppTheme.neonBlue.withOpacity(0.1)) // Normal para reordenação
                   : isActive && isInvalid
-                      ? Colors.red.withOpacity(0.1)
+                      ? AppTheme.error.withOpacity(0.1)
                       : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
               border: isDraggedOver && isValid
                   ? isReorder
                       ? Border(
                           top: _insertBefore
                               ? BorderSide(
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: AppTheme.neonBlue,
                                   width: 2,
                                 )
                               : BorderSide.none,
                           bottom: !_insertBefore
                               ? BorderSide(
-                                  color: Theme.of(context).colorScheme.primary,
+                                  color: AppTheme.neonBlue,
                                   width: 2,
                                 )
                               : BorderSide.none,
                         )
                       : Border.all( // Para mudança de parent, mostra borda completa
-                          color: Theme.of(context).colorScheme.secondary,
+                          color: AppTheme.neonCyan,
                           width: 2,
                         )
+                  : null,
+              boxShadow: isDraggedOver && isValid
+                  ? AppTheme.neonGlowBlue
                   : null,
             ),
             child: TreeNodeTile(

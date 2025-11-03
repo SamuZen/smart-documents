@@ -23,6 +23,7 @@ import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
 import 'commands/set_node_field_command.dart';
 import 'commands/remove_node_field_command.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(const MyApp());
@@ -35,9 +36,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Smart Document',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 118, 206, 47)),
-      ),
+      theme: AppTheme.darkTheme,
+      debugShowCheckedModeBanner: false,
       home: const MyHomePage(title: 'Smart Document'),
     );
   }
@@ -1232,7 +1232,6 @@ class _MyHomePageState extends State<MyHomePage> {
           },
           child: Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(_getWindowTitle()),
         actions: [
           PopupMenuButton<String>(
@@ -1355,25 +1354,40 @@ class _MyHomePageState extends State<MyHomePage> {
                   )
                 : Stack(
                     children: [
-                      // Área principal
-                      const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.description,
-                              size: 64,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'Área de trabalho principal',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey,
+                      // Área principal - Background com gradiente futurista
+                      Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              AppTheme.backgroundDark,
+                              AppTheme.surfaceDark.withOpacity(0.5),
+                              AppTheme.backgroundDark,
+                            ],
+                            stops: const [0.0, 0.5, 1.0],
+                          ),
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.description,
+                                size: 64,
+                                color: AppTheme.neonBlue.withOpacity(0.3),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 16),
+                              Text(
+                                'Área de trabalho principal',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: AppTheme.textSecondary,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       // Janela flutuante com TreeView

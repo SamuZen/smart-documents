@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/node.dart';
+import '../theme/app_theme.dart';
 
 /// Widget para editar campos personalizados de um node
 class DocumentEditor extends StatefulWidget {
@@ -364,27 +365,27 @@ class _DocumentEditorState extends State<DocumentEditor> {
   @override
   Widget build(BuildContext context) {
     if (widget.selectedNode == null) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
+          padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.description_outlined, size: 64, color: Colors.grey),
-              SizedBox(height: 16),
+              Icon(Icons.description_outlined, size: 64, color: AppTheme.textTertiary),
+              const SizedBox(height: 16),
               Text(
                 'Nenhum node selecionado',
                 style: TextStyle(
                   fontSize: 16,
-                  color: Colors.grey,
+                  color: AppTheme.textSecondary,
                 ),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 'Selecione um node para editar seus campos',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey,
+                  color: AppTheme.textTertiary,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -411,14 +412,15 @@ class _DocumentEditorState extends State<DocumentEditor> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.folder, size: 20, color: Colors.blue),
+                      Icon(Icons.folder, size: 20, color: AppTheme.neonBlue),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           node.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
                           ),
                         ),
                       ),
@@ -429,7 +431,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                     'ID: ${node.id}',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey[600],
+                      color: AppTheme.textSecondary,
                     ),
                   ),
                 ],
@@ -449,11 +451,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
           const SizedBox(height: 8),
 
           if (fields.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
               child: Text(
                 'Nenhum campo adicionado',
-                style: TextStyle(color: Colors.grey),
+                style: TextStyle(color: AppTheme.textSecondary),
               ),
             )
           else
@@ -513,7 +515,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                             visualDensity: VisualDensity.compact,
                           ),
                           IconButton(
-                            icon: const Icon(Icons.delete, size: 20, color: Colors.red),
+                            icon: Icon(Icons.delete, size: 20, color: AppTheme.error),
                             tooltip: 'Remover campo',
                             onPressed: () => _removeField(key),
                             padding: EdgeInsets.zero,
@@ -540,7 +542,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                     value is bool && value ? 'Verdadeiro' : 'Falso',
                                     style: TextStyle(
                                       fontSize: 14,
-                                      color: Colors.grey[700],
+                                      color: AppTheme.textSecondary,
                                       fontStyle: FontStyle.italic,
                                     ),
                                   ),
@@ -634,7 +636,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         _newFieldValueController.text.toLowerCase() == 'true' ? 'Verdadeiro' : 'Falso',
                         style: TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[700],
+                          color: AppTheme.textSecondary,
                           fontStyle: FontStyle.italic,
                         ),
                       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/action_item.dart';
 import '../models/node.dart';
+import '../theme/app_theme.dart';
 
 class ActionsPanel extends StatefulWidget {
   final Node? selectedNode;
@@ -246,10 +247,10 @@ class _ActionsPanelState extends State<ActionsPanel> {
         Container(
           padding: const EdgeInsets.all(8.0),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+            color: AppTheme.surfaceVariantDark,
             border: Border(
               bottom: BorderSide(
-                color: Theme.of(context).dividerColor,
+                color: AppTheme.neonBlue.withOpacity(0.2),
                 width: 1,
               ),
             ),
@@ -317,14 +318,14 @@ class _ActionsPanelState extends State<ActionsPanel> {
                       Icon(
                         Icons.info_outline,
                         size: 48,
-                        color: Colors.grey[400],
+                        color: AppTheme.textTertiary,
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'Nenhum item selecionado',
                         style: TextStyle(
                           fontSize: 16,
-                          color: Colors.grey[600],
+                          color: AppTheme.textSecondary,
                         ),
                       ),
                     ],
@@ -338,14 +339,14 @@ class _ActionsPanelState extends State<ActionsPanel> {
                           Icon(
                             Icons.filter_alt_off,
                             size: 48,
-                            color: Colors.grey[400],
+                            color: AppTheme.textTertiary,
                           ),
                           const SizedBox(height: 16),
                           Text(
                             'Nenhuma ação encontrada',
                             style: TextStyle(
                               fontSize: 16,
-                              color: Colors.grey[600],
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -353,7 +354,7 @@ class _ActionsPanelState extends State<ActionsPanel> {
                             'Tente ajustar os filtros',
                             style: TextStyle(
                               fontSize: 12,
-                              color: Colors.grey[500],
+                              color: AppTheme.textTertiary,
                             ),
                           ),
                         ],
@@ -371,8 +372,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
                             action.icon,
                             size: 20,
                             color: action.available
-                                ? Theme.of(context).colorScheme.primary
-                                : Colors.grey[400],
+                                ? AppTheme.neonBlue
+                                : AppTheme.textTertiary,
                           ),
                           title: Row(
                             children: [
@@ -382,8 +383,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.w500,
                                     color: action.available
-                                        ? null
-                                        : Colors.grey[500],
+                                        ? AppTheme.textPrimary
+                                        : AppTheme.textTertiary,
                                   ),
                                 ),
                               ),
@@ -395,11 +396,15 @@ class _ActionsPanelState extends State<ActionsPanel> {
                                   ),
                                   decoration: BoxDecoration(
                                     color: action.available
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .primaryContainer
-                                        : Colors.grey[300],
+                                        ? AppTheme.neonBlue.withOpacity(0.2)
+                                        : AppTheme.surfaceVariantDark,
                                     borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: action.available
+                                          ? AppTheme.neonBlue.withOpacity(0.5)
+                                          : AppTheme.textTertiary.withOpacity(0.3),
+                                      width: 1,
+                                    ),
                                   ),
                                   child: Text(
                                     action.shortcut!,
@@ -407,10 +412,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
                                       fontSize: 11,
                                       fontWeight: FontWeight.bold,
                                       color: action.available
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .onPrimaryContainer
-                                          : Colors.grey[600],
+                                          ? AppTheme.neonBlue
+                                          : AppTheme.textTertiary,
                                     ),
                                   ),
                                 ),
@@ -425,8 +428,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: action.available
-                                      ? Colors.grey[700]
-                                      : Colors.grey[500],
+                                      ? AppTheme.textSecondary
+                                      : AppTheme.textTertiary,
                                 ),
                               ),
                               if (action.condition != null)
@@ -437,7 +440,7 @@ class _ActionsPanelState extends State<ActionsPanel> {
                                       Icon(
                                         Icons.info_outline,
                                         size: 12,
-                                        color: Colors.grey[500],
+                                        color: AppTheme.textTertiary,
                                       ),
                                       const SizedBox(width: 4),
                                       Expanded(
@@ -446,7 +449,7 @@ class _ActionsPanelState extends State<ActionsPanel> {
                                           style: TextStyle(
                                             fontSize: 11,
                                             fontStyle: FontStyle.italic,
-                                            color: Colors.grey[600],
+                                            color: AppTheme.textSecondary,
                                           ),
                                         ),
                                       ),
@@ -496,8 +499,12 @@ class _ActionsPanelState extends State<ActionsPanel> {
     return Container(
       padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(4),
+        color: AppTheme.neonBlue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: AppTheme.neonBlue.withOpacity(0.3),
+          width: 1,
+        ),
       ),
       child: Row(
         children: [
@@ -506,7 +513,7 @@ class _ActionsPanelState extends State<ActionsPanel> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.bold,
-              color: Colors.grey[700],
+              color: AppTheme.textSecondary,
             ),
           ),
           Expanded(
@@ -514,8 +521,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
               value,
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w500,
+                color: AppTheme.neonBlue,
+                fontWeight: FontWeight.w600,
               ),
               overflow: TextOverflow.ellipsis,
             ),

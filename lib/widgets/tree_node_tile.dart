@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 import '../models/node.dart';
+import '../theme/app_theme.dart';
 
 class TreeNodeTile extends StatefulWidget {
   final Node node;
@@ -152,10 +153,23 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
     final indent = widget.depth * 24.0;
     
     return Container(
-      color: widget.isSelected 
-        ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-        : Colors.transparent,
+      decoration: BoxDecoration(
+        color: widget.isSelected 
+          ? AppTheme.neonBlue.withOpacity(0.15)
+          : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        border: widget.isSelected
+          ? Border.all(
+              color: AppTheme.neonBlue.withOpacity(0.5),
+              width: 1,
+            )
+          : null,
+        boxShadow: widget.isSelected
+          ? AppTheme.neonGlowBlue
+          : null,
+      ),
       padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      margin: const EdgeInsets.symmetric(vertical: 2.0),
       child: Row(
         children: [
           SizedBox(width: indent),
@@ -167,13 +181,13 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
                 widget.onToggle?.call();
               },
               behavior: HitTestBehavior.opaque,
-              child: AnimatedRotation(
+                child: AnimatedRotation(
                 turns: widget.isExpanded ? 0.25 : 0.0,
                 duration: const Duration(milliseconds: 200),
                 child: Icon(
                   Icons.chevron_right,
                   size: 20,
-                  color: Colors.grey[600],
+                  color: AppTheme.neonBlue,
                 ),
               ),
             )
@@ -183,8 +197,8 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
             widget.node.isLeaf ? Icons.insert_drive_file : Icons.folder,
             size: 20,
             color: widget.node.isLeaf
-                ? Colors.blueGrey
-                : Theme.of(context).colorScheme.primary,
+                ? AppTheme.textSecondary
+                : AppTheme.neonBlue,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -194,30 +208,32 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
                     focusNode: _focusNode,
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
                     ),
                     decoration: InputDecoration(
                       isDense: true,
                       contentPadding: EdgeInsets.zero,
+                      filled: true,
+                      fillColor: AppTheme.surfaceVariantDark,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6),
                         borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: AppTheme.neonBlue,
                           width: 2,
                         ),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6),
                         borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: AppTheme.neonBlue,
                           width: 2,
                         ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6),
                         borderSide: BorderSide(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: AppTheme.neonBlue,
                           width: 2,
                         ),
                       ),
@@ -229,8 +245,11 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
                     widget.node.name,
                     style: TextStyle(
                       fontSize: 16,
-                      color: widget.node.isLeaf ? Colors.grey[700] : Colors.black87,
-                      fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
+                      color: widget.node.isLeaf 
+                        ? AppTheme.textSecondary 
+                        : AppTheme.textPrimary,
+                      fontWeight: widget.isSelected ? FontWeight.w600 : FontWeight.normal,
+                      letterSpacing: 0.2,
                     ),
                   ),
           ),
@@ -268,19 +287,17 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
         elevation: 6,
         color: Colors.transparent,
         child: Opacity(
-          opacity: 0.8,
+          opacity: 0.9,
           child: Container(
             width: 200,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(4),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 8,
-                  spreadRadius: 2,
-                ),
-              ],
+              color: AppTheme.surfaceDark,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppTheme.neonBlue,
+                width: 1.5,
+              ),
+              boxShadow: AppTheme.neonGlowStrong,
             ),
             child: _buildTileContent(),
           ),
