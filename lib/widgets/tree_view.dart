@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/node.dart';
 import 'tree_node_tile.dart';
 
@@ -40,9 +41,30 @@ class _TreeViewState extends State<TreeView> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(8.0),
-      children: _buildTreeNodes(widget.rootNode, 0),
+    return Shortcuts(
+      shortcuts: {
+        LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
+      },
+      child: Actions(
+        actions: {
+          _F2Intent: CallbackAction<_F2Intent>(
+            onInvoke: (_) {
+              // Lógica mais simples: apenas detecta F2
+              if (_selectedNodeId != null) {
+                print('F2 pressionado para o nó: $_selectedNodeId');
+              }
+              return null;
+            },
+          ),
+        },
+        child: Focus(
+          autofocus: true,
+          child: ListView(
+            padding: const EdgeInsets.all(8.0),
+            children: _buildTreeNodes(widget.rootNode, 0),
+          ),
+        ),
+      ),
     );
   }
 
@@ -75,5 +97,10 @@ class _TreeViewState extends State<TreeView> {
 
     return widgets;
   }
+}
+
+// Intent para detectar F2
+class _F2Intent extends Intent {
+  const _F2Intent();
 }
 
