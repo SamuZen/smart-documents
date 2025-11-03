@@ -36,10 +36,12 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   Size? _resizeStartSize;
   
   // Sistema de docking
-  static const double _dockThreshold = 80.0; // Distância para ativar dock (aumentado)
+  static const double _dockThreshold = 30.0; // Distância para ativar dock (reduzido)
+  static const double _undockThreshold = 30.0; // Distância mínima para sair do dock (reduzido para facilitar)
   String? _currentDockZone; // 'left', 'right', 'top', 'bottom', null
   String? _lastDetectedDockZone; // Última zona detectada durante o drag
   String? _dockedZone; // Zona onde a janela está dockada (null se não dockada)
+  String? _justUndockedZone; // Zona da qual acabou de sair (para evitar redock imediato)
   Size? _screenSize;
 
   @override
@@ -52,21 +54,12 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
 
   void _onDragStart(DragStartDetails details) {
     if (!_isResizing) {
-      // Se estava dockado, remove o dock ao começar a arrastar
-      if (_dockedZone != null) {
-        // Salva o tamanho atual antes de des-dockar
-        final previousWidth = _width;
-        final previousHeight = _height;
-        _dockedZone = null;
-        // Restaura tamanho original se necessário
-        _width = previousWidth;
-        _height = previousHeight;
-      }
-      
       setState(() {
         _isDragging = true;
         _currentDockZone = null;
         _lastDetectedDockZone = null;
+        // Limpa a flag de "just undocked" quando começa novo drag
+        _justUndockedZone = null;
       });
     }
   }
@@ -74,23 +67,77 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   void _updateDockZone(Offset position, Size screenSize) {
     String? newZone;
     
-    // Detecta zona de docking baseado na posição
-    final leftDistance = position.dx;
-    final rightDistance = screenSize.width - position.dx - _width;
-    final topDistance = position.dy;
-    final bottomDistance = screenSize.height - position.dy - _height;
+    // Se estiver dockado, verifica se deve sair do dock
+    if (_dockedZone != null) {
+      final availableSize = _getAvailableSize(screenSize);
+      bool shouldUndock = false;
+      
+      // Verifica se está suficientemente longe da borda para sair do dock
+      // Usa a borda da janela (não o centro) para detectar se saiu da zona de dock
+      switch (_dockedZone) {
+        case 'left':
+          // Se a borda esquerda da janela se afastou da borda esquerda da tela
+          shouldUndock = position.dx > _undockThreshold;
+          break;
+        case 'right':
+          // Se a borda direita da janela se afastou da borda direita da tela
+          shouldUndock = (availableSize.width - position.dx - _width) > _undockThreshold;
+          break;
+        case 'top':
+          // Se a borda superior da janela se afastou da borda superior da tela
+          shouldUndock = position.dy > _undockThreshold;
+          break;
+        case 'bottom':
+          // Se a borda inferior da janela se afastou da borda inferior da tela
+          shouldUndock = (availableSize.height - position.dy - _height) > _undockThreshold;
+          break;
+      }
+      
+      if (shouldUndock) {
+        // Sai do dock - marca a zona da qual saiu para evitar redock imediato
+        _justUndockedZone = _dockedZone;
+        _dockedZone = null;
+        _currentDockZone = null;
+        _lastDetectedDockZone = null;
+        return;
+      } else {
+        // Ainda está próximo, mantém dockado
+        _currentDockZone = _dockedZone;
+        return;
+      }
+    }
     
-    // Verifica qual borda está mais próxima
-    if (leftDistance < _dockThreshold && (leftDistance < rightDistance || rightDistance >= _dockThreshold)) {
+    // Se não estiver dockado, detecta nova zona de docking
+    final availableSize = _getAvailableSize(screenSize);
+    final leftDistance = position.dx;
+    final rightDistance = availableSize.width - position.dx - _width;
+    final topDistance = position.dy;
+    final bottomDistance = availableSize.height - position.dy - _height;
+    
+    // Verifica qual borda está mais próxima (threshold reduzido)
+    // Mas ignora se acabou de sair dessa zona (evita redock imediato)
+    if (leftDistance < _dockThreshold && 
+        (leftDistance < rightDistance || rightDistance >= _dockThreshold) &&
+        _justUndockedZone != 'left') {
       newZone = 'left';
-    } else if (rightDistance < _dockThreshold) {
+    } else if (rightDistance < _dockThreshold && _justUndockedZone != 'right') {
       newZone = 'right';
-    } else if (topDistance < _dockThreshold && (topDistance < bottomDistance || bottomDistance >= _dockThreshold)) {
+    } else if (topDistance < _dockThreshold && 
+               (topDistance < bottomDistance || bottomDistance >= _dockThreshold) &&
+               _justUndockedZone != 'top') {
       newZone = 'top';
-    } else if (bottomDistance < _dockThreshold) {
+    } else if (bottomDistance < _dockThreshold && _justUndockedZone != 'bottom') {
       newZone = 'bottom';
     } else {
       newZone = null;
+    }
+    
+    // Se está longe o suficiente de todas as bordas, limpa a flag de "just undocked"
+    if (leftDistance > _undockThreshold && 
+        rightDistance > _undockThreshold && 
+        topDistance > _undockThreshold && 
+        bottomDistance > _undockThreshold) {
+      _justUndockedZone = null;
     }
     
     // Mantém a última zona detectada
@@ -158,7 +205,14 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
       case 'top':
       case 'bottom':
         // Para dock vertical, ajusta largura para ocupar toda área disponível
-        return Size(availableSize.width, _height);
+        // Mas usa altura menor (padrão reduzido para top/bottom)
+        final maxHeight = availableSize.height * 0.4; // Máximo 40% da altura
+        // Garante que maxHeight seja pelo menos widget.minHeight para evitar erro no clamp
+        // Se a tela for muito pequena, usa minHeight como máximo também
+        final clampedMaxHeight = maxHeight < widget.minHeight ? widget.minHeight : maxHeight;
+        // Limita a altura atual entre minHeight e o máximo permitido
+        final defaultHeight = _height.clamp(widget.minHeight, clampedMaxHeight);
+        return Size(availableSize.width, defaultHeight);
       default:
         return Size(_width, _height);
     }
@@ -166,7 +220,8 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   
   void _adjustDockedSize() {
     // Ajusta tamanho e posição se estiver dockado
-    if (_dockedZone != null && _screenSize != null) {
+    // MAS não durante drag ou resize (permite que o usuário arraste para sair do dock)
+    if (_dockedZone != null && _screenSize != null && !_isDragging && !_isResizing) {
       final mediaQuery = MediaQuery.maybeOf(context);
       if (mediaQuery != null) {
         final newScreenSize = mediaQuery.size;
@@ -197,24 +252,68 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
       final mediaQuery = MediaQuery.maybeOf(context);
       if (mediaQuery != null) {
         _screenSize = mediaQuery.size;
+        final availableSize = _getAvailableSize(_screenSize!);
         
         // IMPORTANTE: Detecta zona de dock ANTES de aplicar qualquer clamp
         // Usa a posição "livre" para detectar se estamos próximos da borda
+        final previousDockedZone = _dockedZone;
         _updateDockZone(newPosition, _screenSize!);
         
-        // Se estiver em zona de dock, permite movimento mais livre para facilitar
-        // Caso contrário, aplica limites suaves
-        final clampedPosition = _currentDockZone != null
-            ? newPosition // Em zona de dock, permite movimento mais livre
-            : Offset(
-                newPosition.dx.clamp(0, _screenSize!.width - _width),
-                newPosition.dy.clamp(0, _screenSize!.height - _height),
-              );
-        
-        // Um único setState para tudo
-        setState(() {
-          _position = clampedPosition;
-        });
+        // Se saiu do dock durante o drag, aplica limites normais e restaura tamanho se necessário
+        if (previousDockedZone != null && _dockedZone == null) {
+          // Saiu do dock, aplica limites normais e permite movimento livre
+          // Se a janela estava com tamanho de dock (altura/largura cheia), restaura tamanho razoável
+          double? newWidth;
+          double? newHeight;
+          
+          // Se estava dockado lateralmente (left/right), a altura pode estar cheia
+          if (previousDockedZone == 'left' || previousDockedZone == 'right') {
+            if (_height > availableSize.height * 0.8) {
+              // Altura muito grande, restaura para um tamanho razoável
+              newHeight = widget.initialHeight.clamp(widget.minHeight, availableSize.height * 0.7);
+            }
+          }
+          
+          // Se estava dockado verticalmente (top/bottom), a largura pode estar cheia
+          if (previousDockedZone == 'top' || previousDockedZone == 'bottom') {
+            if (_width > availableSize.width * 0.8) {
+              // Largura muito grande, restaura para um tamanho razoável
+              newWidth = widget.initialWidth.clamp(widget.minWidth, availableSize.width * 0.7);
+            }
+          }
+          
+          final clampedPosition = Offset(
+            newPosition.dx.clamp(0, availableSize.width - (newWidth ?? _width)),
+            newPosition.dy.clamp(0, availableSize.height - (newHeight ?? _height)),
+          );
+          
+          setState(() {
+            _position = clampedPosition;
+            if (newWidth != null) _width = newWidth;
+            if (newHeight != null) _height = newHeight;
+          });
+        } else if (_dockedZone != null) {
+          // Está dockado, permite movimento livre para facilitar saída do dock
+          // A lógica de undock será verificada no _updateDockZone
+          setState(() {
+            _position = newPosition;
+          });
+        } else if (_currentDockZone != null && _dockedZone == null) {
+          // Está entrando em zona de dock (mas ainda não dockado), permite movimento livre
+          setState(() {
+            _position = newPosition;
+          });
+        } else {
+          // Não está dockado nem próximo de dock, aplica limites normais
+          final clampedPosition = Offset(
+            newPosition.dx.clamp(0, availableSize.width - _width),
+            newPosition.dy.clamp(0, availableSize.height - _height),
+          );
+          
+          setState(() {
+            _position = clampedPosition;
+          });
+        }
       } else {
         setState(() {
           _position = newPosition;
@@ -224,10 +323,21 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
   }
 
   void _finishDrag() {
+    // Se estava dockado e saiu do dock, não tenta fazer dock novamente
+    if (_dockedZone == null && _currentDockZone == null && _lastDetectedDockZone == null) {
+      // Não está em nenhuma zona, apenas finaliza o drag
+      setState(() {
+        _isDragging = false;
+        _currentDockZone = null;
+        _lastDetectedDockZone = null;
+      });
+      return;
+    }
+    
     // Usa a última zona detectada OU a zona atual (preferência para atual)
     final zoneToDock = _currentDockZone ?? _lastDetectedDockZone;
     
-    // Debug: verifica se temos zona e tamanho da tela
+    // Verifica se temos zona e tamanho da tela
     if (_screenSize == null) {
       final mediaQuery = MediaQuery.maybeOf(context);
       if (mediaQuery != null) {
@@ -235,7 +345,9 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
       }
     }
     
-    if (_screenSize != null && zoneToDock != null) {
+    // Só faz dock se realmente estiver próximo da borda E não estava dockado antes
+    // (evita fazer dock novamente imediatamente após sair)
+    if (_screenSize != null && zoneToDock != null && _currentDockZone != null && _dockedZone == null) {
       // Marca como dockado
       _dockedZone = zoneToDock;
       
@@ -253,6 +365,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
         _lastDetectedDockZone = null;
       });
     } else {
+      // Não está próximo o suficiente para fazer dock, apenas finaliza
       setState(() {
         _isDragging = false;
         _currentDockZone = null;
