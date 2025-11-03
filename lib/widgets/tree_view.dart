@@ -206,14 +206,225 @@ class _TreeViewState extends State<TreeView> {
     developer.log('TreeView: Modo de edição cancelado');
   }
 
+  /// Retorna lista plana de todos os nodes visíveis na ordem que aparecem na tela
+  List<Node> _getVisibleNodes() {
+    final List<Node> visibleNodes = [];
+    
+    void collectVisibleNodes(Node node) {
+      visibleNodes.add(node);
+      // Se o node está expandido, adiciona seus filhos recursivamente
+      if (!node.isLeaf && _expandedNodes.contains(node.id)) {
+        for (final child in node.children) {
+          collectVisibleNodes(child);
+        }
+      }
+    }
+    
+    collectVisibleNodes(_rootNode);
+    return visibleNodes;
+  }
+
+  /// Retorna o índice do node na lista de nodes visíveis, ou -1 se não encontrado
+  int _getNodeIndex(String nodeId) {
+    final visibleNodes = _getVisibleNodes();
+    for (int i = 0; i < visibleNodes.length; i++) {
+      if (visibleNodes[i].id == nodeId) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /// Navega para o node anterior (seta para cima)
+  void _navigateUp() {
+    // Não navega se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    final visibleNodes = _getVisibleNodes();
+    if (visibleNodes.isEmpty) return;
+    
+    if (_selectedNodeId == null) {
+      // Se nenhum node está selecionado, seleciona o primeiro
+      _selectNode(visibleNodes.first.id);
+      return;
+    }
+    
+    final currentIndex = _getNodeIndex(_selectedNodeId!);
+    if (currentIndex == -1) {
+      // Node não encontrado, seleciona o primeiro
+      _selectNode(visibleNodes.first.id);
+      return;
+    }
+    
+    if (currentIndex > 0) {
+      // Move para o node anterior
+      _selectNode(visibleNodes[currentIndex - 1].id);
+    }
+    // Se estiver no primeiro, mantém seleção
+  }
+
+  /// Navega para o próximo node (seta para baixo)
+  void _navigateDown() {
+    // Não navega se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    final visibleNodes = _getVisibleNodes();
+    if (visibleNodes.isEmpty) return;
+    
+    if (_selectedNodeId == null) {
+      // Se nenhum node está selecionado, seleciona o primeiro
+      _selectNode(visibleNodes.first.id);
+      return;
+    }
+    
+    final currentIndex = _getNodeIndex(_selectedNodeId!);
+    if (currentIndex == -1) {
+      // Node não encontrado, seleciona o primeiro
+      _selectNode(visibleNodes.first.id);
+      return;
+    }
+    
+    if (currentIndex < visibleNodes.length - 1) {
+      // Move para o próximo node
+      _selectNode(visibleNodes[currentIndex + 1].id);
+    }
+    // Se estiver no último, mantém seleção
+  }
+
+  /// Colapsa o node selecionado (seta para esquerda)
+  void _collapseSelected() {
+    // Não colapsa se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    if (_selectedNodeId == null) return;
+    
+    final selectedNode = _rootNode.findById(_selectedNodeId!);
+    if (selectedNode == null || selectedNode.isLeaf) return;
+    
+    // Se estiver expandido, colapsa
+    if (_expandedNodes.contains(_selectedNodeId)) {
+      _toggleExpand(_selectedNodeId!);
+    }
+  }
+
+  /// Expande o node selecionado (seta para direita)
+  void _expandSelected() {
+    // Não expande se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    if (_selectedNodeId == null) return;
+    
+    final selectedNode = _rootNode.findById(_selectedNodeId!);
+    if (selectedNode == null || selectedNode.isLeaf) return;
+    
+    // Se estiver colapsado, expande
+    if (!_expandedNodes.contains(_selectedNodeId)) {
+      _toggleExpand(_selectedNodeId!);
+    }
+  }
+
+  /// Navega para o próximo node não-leaf (Ctrl + seta para cima)
+  void _navigateToPreviousNonLeaf() {
+    // Não navega se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    final visibleNodes = _getVisibleNodes();
+    if (visibleNodes.isEmpty) return;
+    
+    int startIndex;
+    if (_selectedNodeId == null) {
+      startIndex = visibleNodes.length;
+    } else {
+      startIndex = _getNodeIndex(_selectedNodeId!);
+      if (startIndex == -1) {
+        startIndex = visibleNodes.length;
+      }
+    }
+    
+    // Procura para trás pelo próximo node não-leaf
+    for (int i = startIndex - 1; i >= 0; i--) {
+      if (!visibleNodes[i].isLeaf) {
+        _selectNode(visibleNodes[i].id);
+        return;
+      }
+    }
+    
+    // Se não encontrou, mantém seleção atual ou seleciona o primeiro se não havia seleção
+    if (_selectedNodeId == null && visibleNodes.isNotEmpty) {
+      _selectNode(visibleNodes.first.id);
+    }
+  }
+
+  /// Navega para o próximo node não-leaf (Ctrl + seta para baixo)
+  void _navigateToNextNonLeaf() {
+    // Não navega se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    final visibleNodes = _getVisibleNodes();
+    if (visibleNodes.isEmpty) return;
+    
+    int startIndex;
+    if (_selectedNodeId == null) {
+      startIndex = -1;
+    } else {
+      startIndex = _getNodeIndex(_selectedNodeId!);
+      if (startIndex == -1) {
+        startIndex = -1;
+      }
+    }
+    
+    // Procura para frente pelo próximo node não-leaf
+    for (int i = startIndex + 1; i < visibleNodes.length; i++) {
+      if (!visibleNodes[i].isLeaf) {
+        _selectNode(visibleNodes[i].id);
+        return;
+      }
+    }
+    
+    // Se não encontrou, mantém seleção atual ou seleciona o último se não havia seleção
+    if (_selectedNodeId == null && visibleNodes.isNotEmpty) {
+      _selectNode(visibleNodes.last.id);
+    }
+  }
+
+  Map<LogicalKeySet, Intent> _getShortcuts() {
+    final shortcuts = <LogicalKeySet, Intent>{
+      LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
+      LogicalKeySet(LogicalKeyboardKey.escape): const _CancelEditingIntent(),
+      LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmEditingIntent(),
+      LogicalKeySet(LogicalKeyboardKey.arrowUp): const _ArrowUpIntent(),
+      LogicalKeySet(LogicalKeyboardKey.arrowDown): const _ArrowDownIntent(),
+      // Ctrl + setas para navegar entre nodes não-leaf
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowUp): const _CtrlArrowUpIntent(),
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowDown): const _CtrlArrowDownIntent(),
+    };
+    
+    // Só adiciona shortcuts de esquerda/direita se não estiver editando
+    // Quando está editando, o TextField precisa processar essas teclas
+    if (_editingNodeId == null) {
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowLeft)] = const _ArrowLeftIntent();
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowRight)] = const _ArrowRightIntent();
+    }
+    
+    return shortcuts;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
-        LogicalKeySet(LogicalKeyboardKey.escape): const _CancelEditingIntent(),
-        LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmEditingIntent(),
-      },
+      shortcuts: _getShortcuts(),
       child: Actions(
         actions: {
           _F2Intent: CallbackAction<_F2Intent>(
@@ -259,6 +470,58 @@ class _TreeViewState extends State<TreeView> {
                 // Se não processar, o onConfirmEditing vai fazer
               }
               _confirmEditing();
+              return null;
+            },
+          ),
+          _ArrowUpIntent: CallbackAction<_ArrowUpIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] SETA PARA CIMA pressionada');
+              _navigateUp();
+              return null;
+            },
+          ),
+          _ArrowDownIntent: CallbackAction<_ArrowDownIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] SETA PARA BAIXO pressionada');
+              _navigateDown();
+              return null;
+            },
+          ),
+          _ArrowLeftIntent: CallbackAction<_ArrowLeftIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] SETA PARA ESQUERDA pressionada');
+              // Não processa se estiver editando (deixa o TextField processar)
+              if (_editingNodeId != null) {
+                print('   Ignorando porque está editando');
+                return null;
+              }
+              _collapseSelected();
+              return null;
+            },
+          ),
+          _ArrowRightIntent: CallbackAction<_ArrowRightIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] SETA PARA DIREITA pressionada');
+              // Não processa se estiver editando (deixa o TextField processar)
+              if (_editingNodeId != null) {
+                print('   Ignorando porque está editando');
+                return null;
+              }
+              _expandSelected();
+              return null;
+            },
+          ),
+          _CtrlArrowUpIntent: CallbackAction<_CtrlArrowUpIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] CTRL + SETA PARA CIMA pressionada');
+              _navigateToPreviousNonLeaf();
+              return null;
+            },
+          ),
+          _CtrlArrowDownIntent: CallbackAction<_CtrlArrowDownIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] CTRL + SETA PARA BAIXO pressionada');
+              _navigateToNextNonLeaf();
               return null;
             },
           ),
@@ -343,5 +606,35 @@ class _CancelEditingIntent extends Intent {
 // Intent para confirmar edição (Enter)
 class _ConfirmEditingIntent extends Intent {
   const _ConfirmEditingIntent();
+}
+
+// Intent para navegar para cima (↑)
+class _ArrowUpIntent extends Intent {
+  const _ArrowUpIntent();
+}
+
+// Intent para navegar para baixo (↓)
+class _ArrowDownIntent extends Intent {
+  const _ArrowDownIntent();
+}
+
+// Intent para colapsar (←)
+class _ArrowLeftIntent extends Intent {
+  const _ArrowLeftIntent();
+}
+
+// Intent para expandir (→)
+class _ArrowRightIntent extends Intent {
+  const _ArrowRightIntent();
+}
+
+// Intent para navegar para o node não-leaf anterior (Ctrl + ↑)
+class _CtrlArrowUpIntent extends Intent {
+  const _CtrlArrowUpIntent();
+}
+
+// Intent para navegar para o próximo node não-leaf (Ctrl + ↓)
+class _CtrlArrowDownIntent extends Intent {
+  const _CtrlArrowDownIntent();
 }
 
