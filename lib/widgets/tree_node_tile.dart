@@ -1,0 +1,69 @@
+import 'package:flutter/material.dart';
+import '../models/node.dart';
+
+class TreeNodeTile extends StatelessWidget {
+  final Node node;
+  final int depth;
+  final bool isExpanded;
+  final bool hasChildren;
+  final VoidCallback? onToggle;
+  final VoidCallback? onTap;
+
+  const TreeNodeTile({
+    super.key,
+    required this.node,
+    this.depth = 0,
+    this.isExpanded = false,
+    this.hasChildren = false,
+    this.onToggle,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final indent = depth * 24.0;
+
+    return InkWell(
+      onTap: onToggle ?? onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+        child: Row(
+          children: [
+            SizedBox(width: indent),
+            // Ícone de expandir/colapsar (se tiver filhos)
+            if (hasChildren)
+              AnimatedRotation(
+                turns: isExpanded ? 0.25 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Colors.grey[600],
+                ),
+              )
+            else
+              const SizedBox(width: 20),
+            Icon(
+              node.isLeaf ? Icons.insert_drive_file : Icons.folder,
+              size: 20,
+              color: node.isLeaf
+                  ? Colors.blueGrey
+                  : Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                node.name,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: node.isLeaf ? Colors.grey[700] : Colors.black87,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
