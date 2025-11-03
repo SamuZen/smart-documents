@@ -24,6 +24,7 @@ class DocumentEditor extends StatefulWidget {
 class _DocumentEditorState extends State<DocumentEditor> {
   final Map<String, TextEditingController> _controllers = {};
   final Map<String, String> _fieldTypes = {}; // Armazena tipo de cada campo
+  final Map<String, FocusNode> _focusNodes = {}; // Rastreia nodes de foco para evitar atualizar durante edição
   String _newFieldType = 'String';
   final TextEditingController _newFieldKeyController = TextEditingController();
   final TextEditingController _newFieldValueController = TextEditingController();
@@ -41,28 +42,112 @@ class _DocumentEditorState extends State<DocumentEditor> {
       controller.dispose();
     }
     _controllers.clear();
+    
+    for (final focusNode in _focusNodes.values) {
+      focusNode.dispose();
+    }
+    _focusNodes.clear();
   }
 
   @override
   void didUpdateWidget(DocumentEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedNode?.id != widget.selectedNode?.id) {
+    
+    // Atualiza se o node mudou (ID diferente) ou se os campos mudaram
+    final oldNode = oldWidget.selectedNode;
+    final newNode = widget.selectedNode;
+    
+    if (oldNode?.id != newNode?.id) {
+      // Node diferente, atualiza controllers
       _updateControllers();
+    } else if (oldNode != null && newNode != null) {
+      // Mesmo node, mas pode ter mudado os campos (undo/redo)
+      if (_fieldsChanged(oldNode.fields, newNode.fields)) {
+        _updateControllers();
+      }
+    } else if (oldNode == null && newNode != null) {
+      // Node foi selecionado
+      _updateControllers();
+    } else if (oldNode != null && newNode == null) {
+      // Node foi deselecionado
+      _disposeControllers();
+      _fieldTypes.clear();
     }
   }
 
-  void _updateControllers() {
-    _disposeControllers();
-    _fieldTypes.clear();
+  /// Verifica se os campos mudaram entre dois maps
+  bool _fieldsChanged(Map<String, dynamic> oldFields, Map<String, dynamic> newFields) {
+    // Se o número de campos mudou, claramente mudou
+    if (oldFields.length != newFields.length) {
+      return true;
+    }
+    
+    // Verifica se algum campo foi removido ou adicionado
+    if (oldFields.keys.toSet() != newFields.keys.toSet()) {
+      return true;
+    }
+    
+    // Verifica se algum valor mudou
+    for (final key in oldFields.keys) {
+      if (oldFields[key] != newFields[key]) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
 
+  void _updateControllers() {
     if (widget.selectedNode == null) {
+      _disposeControllers();
+      _fieldTypes.clear();
       return;
     }
 
-    // Cria controllers para cada campo existente
-    widget.selectedNode!.fields.forEach((key, value) {
-      _controllers[key] = TextEditingController(text: _valueToString(value));
-      _fieldTypes[key] = _getValueType(value);
+    final node = widget.selectedNode!;
+    final newFields = node.fields;
+    
+    // Remove controllers de campos que não existem mais
+    final keysToRemove = _controllers.keys.where((key) => !newFields.containsKey(key)).toList();
+    for (final key in keysToRemove) {
+      _controllers[key]?.dispose();
+      _controllers.remove(key);
+      _focusNodes[key]?.removeListener(() {});
+      _focusNodes[key]?.dispose();
+      _focusNodes.remove(key);
+      _fieldTypes.remove(key);
+    }
+    
+    // Atualiza ou cria controllers para campos existentes
+    newFields.forEach((key, value) {
+      final isEditing = _focusNodes[key]?.hasFocus ?? false;
+      
+      if (_controllers.containsKey(key)) {
+        // Campo já existe
+        if (!isEditing) {
+          // Só atualiza se não está sendo editado
+          final currentValue = _valueToString(value);
+          if (_controllers[key]!.text != currentValue) {
+            _controllers[key]!.text = currentValue;
+          }
+          _fieldTypes[key] = _getValueType(value);
+        }
+        // Se está editando, mantém o valor atual do controller
+        // O listener já foi adicionado quando o FocusNode foi criado
+      } else {
+        // Novo campo, cria controller e focus node
+        _controllers[key] = TextEditingController(text: _valueToString(value));
+        _fieldTypes[key] = _getValueType(value);
+        _focusNodes[key] = FocusNode();
+        
+        // Adiciona listener para salvar quando perder foco
+        _focusNodes[key]!.addListener(() {
+          if (!_focusNodes[key]!.hasFocus) {
+            // Perdeu foco, confirma a edição
+            _confirmFieldEdit(key);
+          }
+        });
+      }
     });
   }
 
@@ -128,12 +213,22 @@ class _DocumentEditorState extends State<DocumentEditor> {
     _updateControllers();
   }
 
-  void _updateField(String key, String valueStr) {
-    if (widget.selectedNode == null) return;
 
+  void _confirmFieldEdit(String key) {
+    if (widget.selectedNode == null) return;
+    
+    final controller = _controllers[key];
+    if (controller == null) return;
+    
+    final valueStr = controller.text;
     final type = _fieldTypes[key] ?? 'String';
     final value = _parseValue(valueStr, type);
-    widget.onFieldChanged(widget.selectedNode!.id, key, value);
+    
+    // Verifica se o valor realmente mudou
+    final currentValue = widget.selectedNode!.fields[key];
+    if (currentValue != value) {
+      widget.onFieldChanged(widget.selectedNode!.id, key, value);
+    }
   }
 
   void _removeField(String key) {
@@ -244,11 +339,24 @@ class _DocumentEditorState extends State<DocumentEditor> {
             ...fields.entries.map((entry) {
               final key = entry.key;
               final value = entry.value;
-              final controller = _controllers[key] ?? TextEditingController(text: _valueToString(value));
-              if (_controllers[key] == null) {
-                _controllers[key] = controller;
+              
+              // Garante que temos controller e focusNode para este campo
+              if (!_controllers.containsKey(key)) {
+                _controllers[key] = TextEditingController(text: _valueToString(value));
                 _fieldTypes[key] = _getValueType(value);
+                _focusNodes[key] = FocusNode();
+                
+                // Adiciona listener para salvar quando perder foco
+                _focusNodes[key]!.addListener(() {
+                  if (!_focusNodes[key]!.hasFocus) {
+                    // Perdeu foco, confirma a edição
+                    _confirmFieldEdit(key);
+                  }
+                });
               }
+              
+              final controller = _controllers[key]!;
+              final focusNode = _focusNodes[key]!;
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
@@ -287,12 +395,14 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       const SizedBox(height: 8),
                       TextField(
                         controller: controller,
+                        focusNode: focusNode,
                         decoration: InputDecoration(
                           labelText: 'Valor',
                           border: const OutlineInputBorder(),
                           isDense: true,
                         ),
-                        onChanged: (value) => _updateField(key, value),
+                        onSubmitted: (_) => _confirmFieldEdit(key),
+                        onEditingComplete: () => _confirmFieldEdit(key),
                       ),
                     ],
                   ),
