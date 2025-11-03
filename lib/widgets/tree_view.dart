@@ -328,7 +328,7 @@ class _TreeViewState extends State<TreeView> {
     
     setState(() {
       _rootNode = updatedRoot;
-      // Seleciona o novo node (mas não entra em modo de edição)
+      // Seleciona o novo node
       _selectedNodeId = newNodeId;
     });
 
@@ -342,6 +342,20 @@ class _TreeViewState extends State<TreeView> {
         if (widget.onNodeAdded != null) {
           widget.onNodeAdded!(parentNodeId, newNodeId, newNodeName);
         }
+        
+        // Entra em modo de edição após um frame adicional (simula F2)
+        // Isso garante que o TreeNodeTile já foi construído
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _selectedNodeId == newNodeId) {
+            setState(() {
+              _editingNodeId = newNodeId;
+            });
+            // Notifica mudança de estado de edição
+            if (widget.onEditingStateChanged != null) {
+              widget.onEditingStateChanged!(true, newNodeId);
+            }
+          }
+        });
       }
     });
 
