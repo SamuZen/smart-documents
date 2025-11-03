@@ -247,10 +247,10 @@ class _ActionsPanelState extends State<ActionsPanel> {
         Container(
           padding: const EdgeInsets.all(8.0),
           decoration: BoxDecoration(
-            color: AppTheme.surfaceVariantDark,
+            color: AppTheme.surfaceDark, // Mais escuro para diferenciar
             border: Border(
               bottom: BorderSide(
-                color: AppTheme.neonBlue.withOpacity(0.2),
+                color: AppTheme.borderNeutral,
                 width: 1,
               ),
             ),

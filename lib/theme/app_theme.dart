@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 /// Tema futurista com estilo neon, escuro e azul
 class AppTheme {
-  // Cores base - Escuro
+  // Cores base - Escuro (com mais contraste)
   static const Color _backgroundDark = Color(0xFF0A0E27);
-  static const Color _surfaceDark = Color(0xFF151932);
-  static const Color _surfaceVariantDark = Color(0xFF1E2340);
+  static const Color _surfaceDark = Color(0xFF1A1F38); // Mais claro que antes
+  static const Color _surfaceVariantDark = Color(0xFF252B47); // Mais claro para contraste
+  static const Color _surfaceElevated = Color(0xFF2A3049); // Para janelas destacadas
+  static const Color _surfaceNeutral = Color(0xFF1F2435); // Para áreas neutras
   
   // Cores neon azul
   static const Color _neonBlue = Color(0xFF00D9FF);
@@ -15,10 +17,14 @@ class AppTheme {
   static const Color _neonPurple = Color(0xFF7B2CBF);
   static const Color _neonIndigo = Color(0xFF4F46E5);
   
-  // Cores de texto
+  // Cores de texto (melhor contraste)
   static const Color _textPrimary = Color(0xFFE8EAFF);
-  static const Color _textSecondary = Color(0xFFA0A5C7);
-  static const Color _textTertiary = Color(0xFF6B7280);
+  static const Color _textSecondary = Color(0xFFB4B8D0);
+  static const Color _textTertiary = Color(0xFF7A7F95);
+  
+  // Cores de borda (mais neutras)
+  static const Color _borderNeutral = Color(0xFF2D3445);
+  static const Color _borderSubtle = Color(0xFF3A4055);
   
   // Cores de estado
   static const Color _error = Color(0xFFFF3B5C);
@@ -443,9 +449,13 @@ class AppTheme {
   static const Color backgroundDark = _backgroundDark;
   static const Color surfaceDark = _surfaceDark;
   static const Color surfaceVariantDark = _surfaceVariantDark;
+  static const Color surfaceElevated = _surfaceElevated;
+  static const Color surfaceNeutral = _surfaceNeutral;
   static const Color textPrimary = _textPrimary;
   static const Color textSecondary = _textSecondary;
   static const Color textTertiary = _textTertiary;
+  static const Color borderNeutral = _borderNeutral;
+  static const Color borderSubtle = _borderSubtle;
   static const Color error = _error;
   static const Color success = _success;
   static const Color warning = _warning;

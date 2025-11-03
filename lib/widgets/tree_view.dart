@@ -1007,7 +1007,7 @@ class _TreeViewState extends State<TreeView> {
           autofocus: true,
           child: Container(
             decoration: BoxDecoration(
-              color: AppTheme.surfaceDark,
+              color: AppTheme.surfaceDark, // Mantém mais escuro para contraste
             ),
             child: ListView(
               padding: const EdgeInsets.all(8.0),

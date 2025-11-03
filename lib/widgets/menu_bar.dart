@@ -37,10 +37,10 @@ class AppMenuBar extends StatelessWidget {
     return Container(
       height: 28,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariantDark,
+        color: AppTheme.surfaceNeutral, // Diferente para destacar
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.1),
+            color: AppTheme.borderNeutral,
             width: 1,
           ),
         ),
@@ -166,7 +166,7 @@ class _MenuButtonState extends State<_MenuButton> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
                 color: (_isHovered || _isMenuOpen)
-                    ? AppTheme.surfaceDark
+                    ? AppTheme.surfaceVariantDark // Destaque mais sutil
                     : Colors.transparent,
               ),
               child: Text(

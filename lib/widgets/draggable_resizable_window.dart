@@ -516,12 +516,12 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
               width: _width,
               height: _height,
               decoration: BoxDecoration(
-                color: AppTheme.surfaceDark,
+                color: AppTheme.surfaceElevated, // Mais claro para destacar janelas
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: _currentDockZone != null
-                      ? AppTheme.neonBlue.withOpacity(0.5)
-                      : AppTheme.neonBlue.withOpacity(0.15),
+                      ? AppTheme.neonBlue.withOpacity(0.6)
+                      : AppTheme.borderNeutral, // Borda neutra quando não dockado
                   width: _currentDockZone != null ? 1.5 : 1,
                 ),
                 boxShadow: [
@@ -546,14 +546,14 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceVariantDark,
+                      color: AppTheme.surfaceNeutral, // Diferente da janela
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(8),
                         topRight: Radius.circular(8),
                       ),
                       border: Border(
                         bottom: BorderSide(
-                          color: AppTheme.neonBlue.withOpacity(0.1),
+                          color: AppTheme.borderNeutral,
                           width: 1,
                         ),
                       ),
@@ -599,7 +599,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                       bottomRight: Radius.circular(8),
                     ),
                     child: Container(
-                      color: AppTheme.surfaceDark,
+                      color: AppTheme.surfaceElevated, // Mantém consistência
                       child: widget.child,
                     ),
                   ),
@@ -624,7 +624,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                     child: Container(
                       margin: const EdgeInsets.only(right: 0, bottom: 0),
                       decoration: BoxDecoration(
-                        color: AppTheme.surfaceVariantDark.withOpacity(0.5),
+                        color: AppTheme.borderNeutral.withOpacity(0.3),
                         borderRadius: const BorderRadius.only(
                           bottomRight: Radius.circular(8),
                         ),

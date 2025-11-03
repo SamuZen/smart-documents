@@ -1258,19 +1258,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   )
                 : Stack(
                     children: [
-                      // Área principal - Background com gradiente futurista
+                      // Área principal - Background escuro para contraste
                       Container(
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              AppTheme.backgroundDark,
-                              AppTheme.surfaceDark.withOpacity(0.5),
-                              AppTheme.backgroundDark,
-                            ],
-                            stops: const [0.0, 0.5, 1.0],
-                          ),
+                          color: AppTheme.backgroundDark, // Fundo mais escuro para contraste
                         ),
                         child: Center(
                           child: Column(
