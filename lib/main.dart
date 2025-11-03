@@ -7,6 +7,7 @@ import 'widgets/draggable_resizable_window.dart';
 import 'widgets/actions_panel.dart';
 import 'widgets/menu_bar.dart';
 import 'screens/welcome_screen.dart';
+import 'utils/preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -426,6 +427,9 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    // Adiciona à lista de projetos recentes
+    await Preferences.addRecentProject(projectPath, projectName);
+
     // Carrega o projeto criado
     setState(() {
       _rootNode = newRootNode;
@@ -468,6 +472,51 @@ class _MyHomePageState extends State<MyHomePage> {
       }
       return;
     }
+
+    // Adiciona à lista de projetos recentes
+    await Preferences.addRecentProject(projectPath, loadedNode.name);
+
+    // Atualiza estado
+    setState(() {
+      _rootNode = loadedNode;
+      _currentProjectPath = projectPath;
+      _hasUnsavedChanges = false;
+      _showWelcomeScreen = false;
+      _selectedNodeId = null;
+      _expandedNodes.clear();
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Projeto carregado com sucesso')),
+      );
+    }
+  }
+
+  Future<void> _handleOpenRecentProject(String projectPath) async {
+    // Verifica alterações não salvas
+    final canContinue = await _handleUnsavedChangesDialog();
+    if (!canContinue) {
+      return; // Usuário cancelou
+    }
+
+    // Carrega o projeto
+    final loadedNode = await ProjectService.loadProject(projectPath);
+    if (loadedNode == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Erro ao carregar projeto. O projeto pode ter sido movido ou deletado.'),
+          ),
+        );
+        // Remove da lista de recentes se não existe mais
+        await Preferences.removeRecentProject(projectPath);
+      }
+      return;
+    }
+
+    // Adiciona à lista de projetos recentes (move para o topo)
+    await Preferences.addRecentProject(projectPath, loadedNode.name);
 
     // Atualiza estado
     setState(() {
@@ -562,6 +611,9 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         return;
       }
+
+      // Adiciona à lista de projetos recentes
+      await Preferences.addRecentProject(projectPath, projectName);
 
       setState(() {
         _currentProjectPath = projectPath;
@@ -664,6 +716,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 ? WelcomeScreen(
                     onNewProject: _handleNewProject,
                     onOpenProject: _handleOpenProject,
+                    onOpenRecentProject: _handleOpenRecentProject,
                   )
                 : Stack(
                     children: [
