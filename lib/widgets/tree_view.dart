@@ -18,6 +18,7 @@ class TreeView extends StatefulWidget {
 class _TreeViewState extends State<TreeView> {
   final Set<String> _expandedNodes = {};
   String? _selectedNodeId;
+  String? _editingNodeId; // ID do nó que está em modo de edição (mock)
 
   void _toggleExpand(String nodeId) {
     setState(() {
@@ -49,9 +50,11 @@ class _TreeViewState extends State<TreeView> {
         actions: {
           _F2Intent: CallbackAction<_F2Intent>(
             onInvoke: (_) {
-              // Lógica mais simples: apenas detecta F2
+              // Quando F2 é pressionado, ativa modo de edição (mock)
               if (_selectedNodeId != null) {
-                print('F2 pressionado para o nó: $_selectedNodeId');
+                setState(() {
+                  _editingNodeId = _selectedNodeId;
+                });
               }
               return null;
             },
@@ -83,6 +86,7 @@ class _TreeViewState extends State<TreeView> {
           isExpanded: isExpanded,
           hasChildren: hasChildren,
           isSelected: _selectedNodeId == nodeId,
+          isEditing: _editingNodeId == nodeId, // Passa informação se está editando (mock)
           onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
           onTap: () => _selectNode(nodeId),
         ),

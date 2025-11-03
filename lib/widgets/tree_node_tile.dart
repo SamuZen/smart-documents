@@ -7,6 +7,7 @@ class TreeNodeTile extends StatefulWidget {
   final bool isExpanded;
   final bool hasChildren;
   final bool isSelected;
+  final bool isEditing; // Mock: indica se está em modo de edição
   final VoidCallback? onToggle;
   final VoidCallback? onTap;
 
@@ -17,6 +18,7 @@ class TreeNodeTile extends StatefulWidget {
     this.isExpanded = false,
     this.hasChildren = false,
     this.isSelected = false,
+    this.isEditing = false,
     this.onToggle,
     this.onTap,
   });
@@ -76,7 +78,10 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
                   widget.node.name,
                   style: TextStyle(
                     fontSize: 16,
-                    color: widget.node.isLeaf ? Colors.grey[700] : Colors.black87,
+                    // Mock: muda cor quando está editando
+                    color: widget.isEditing
+                        ? Colors.red // Cor diferente para indicar modo de edição (mock)
+                        : (widget.node.isLeaf ? Colors.grey[700] : Colors.black87),
                     fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
                   ),
                 ),
