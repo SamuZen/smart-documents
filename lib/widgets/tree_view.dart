@@ -331,18 +331,29 @@ class _TreeViewState extends State<TreeView> {
     }
   }
 
+  Map<LogicalKeySet, Intent> _getShortcuts() {
+    final shortcuts = <LogicalKeySet, Intent>{
+      LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
+      LogicalKeySet(LogicalKeyboardKey.escape): const _CancelEditingIntent(),
+      LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmEditingIntent(),
+      LogicalKeySet(LogicalKeyboardKey.arrowUp): const _ArrowUpIntent(),
+      LogicalKeySet(LogicalKeyboardKey.arrowDown): const _ArrowDownIntent(),
+    };
+    
+    // Só adiciona shortcuts de esquerda/direita se não estiver editando
+    // Quando está editando, o TextField precisa processar essas teclas
+    if (_editingNodeId == null) {
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowLeft)] = const _ArrowLeftIntent();
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowRight)] = const _ArrowRightIntent();
+    }
+    
+    return shortcuts;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Shortcuts(
-      shortcuts: {
-        LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
-        LogicalKeySet(LogicalKeyboardKey.escape): const _CancelEditingIntent(),
-        LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmEditingIntent(),
-        LogicalKeySet(LogicalKeyboardKey.arrowUp): const _ArrowUpIntent(),
-        LogicalKeySet(LogicalKeyboardKey.arrowDown): const _ArrowDownIntent(),
-        LogicalKeySet(LogicalKeyboardKey.arrowLeft): const _ArrowLeftIntent(),
-        LogicalKeySet(LogicalKeyboardKey.arrowRight): const _ArrowRightIntent(),
-      },
+      shortcuts: _getShortcuts(),
       child: Actions(
         actions: {
           _F2Intent: CallbackAction<_F2Intent>(
@@ -408,6 +419,11 @@ class _TreeViewState extends State<TreeView> {
           _ArrowLeftIntent: CallbackAction<_ArrowLeftIntent>(
             onInvoke: (_) {
               print('⌨️ [TreeView] SETA PARA ESQUERDA pressionada');
+              // Não processa se estiver editando (deixa o TextField processar)
+              if (_editingNodeId != null) {
+                print('   Ignorando porque está editando');
+                return null;
+              }
               _collapseSelected();
               return null;
             },
@@ -415,6 +431,11 @@ class _TreeViewState extends State<TreeView> {
           _ArrowRightIntent: CallbackAction<_ArrowRightIntent>(
             onInvoke: (_) {
               print('⌨️ [TreeView] SETA PARA DIREITA pressionada');
+              // Não processa se estiver editando (deixa o TextField processar)
+              if (_editingNodeId != null) {
+                print('   Ignorando porque está editando');
+                return null;
+              }
               _expandSelected();
               return null;
             },
