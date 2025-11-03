@@ -12,6 +12,15 @@ class Node {
   /// Verifica se o node é uma folha (não tem filhos)
   bool get isLeaf => children.isEmpty;
 
+  /// Conta recursivamente todos os descendentes (filhos, netos, etc.)
+  int countAllDescendants() {
+    int count = children.length;
+    for (final child in children) {
+      count += child.countAllDescendants();
+    }
+    return count;
+  }
+
   /// Adiciona um filho ao node
   void addChild(Node child) {
     children.add(child);

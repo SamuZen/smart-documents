@@ -98,6 +98,73 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _handleNodeAdded(String parentNodeId, String newNodeId, String newNodeName) {
+    developer.log('MyHomePage: _handleNodeAdded chamado. parentNodeId: $parentNodeId, newNodeId: $newNodeId, newNodeName: $newNodeName');
+    
+    // Atualiza a raiz para sincronizar com a TreeView
+    setState(() {
+      _rootNode = _addNodeToParent(_rootNode, parentNodeId, newNodeId, newNodeName);
+    });
+  }
+
+  void _handleNodeDeleted(String deletedNodeId) {
+    developer.log('MyHomePage: _handleNodeDeleted chamado. deletedNodeId: $deletedNodeId');
+    
+    // Atualiza a raiz para sincronizar com a TreeView
+    setState(() {
+      _rootNode = _removeNodeFromTree(_rootNode, deletedNodeId);
+      // Remove do set de nodes expandidos se necessário
+      _expandedNodes.remove(deletedNodeId);
+      // Limpa seleção se o node deletado estava selecionado
+      if (_selectedNodeId == deletedNodeId) {
+        _selectedNodeId = null;
+      }
+    });
+  }
+
+  Node _removeNodeFromTree(Node root, String nodeId) {
+    // Não permite remover a raiz
+    if (root.id == nodeId) {
+      return root;
+    }
+
+    // Remove o node recursivamente
+    Node removeRecursive(Node node) {
+      final filteredChildren = node.children
+          .where((child) => child.id != nodeId)
+          .map((child) => removeRecursive(child))
+          .toList();
+
+      return node.copyWith(children: filteredChildren);
+    }
+
+    return removeRecursive(root);
+  }
+
+  Node _addNodeToParent(Node root, String parentNodeId, String newNodeId, String newNodeName) {
+    // Cria o novo node
+    final newNode = Node(
+      id: newNodeId,
+      name: newNodeName,
+    );
+
+    // Adiciona o novo node como filho do parent
+    Node addChildRecursive(Node node) {
+      if (node.id == parentNodeId) {
+        final newChildren = List<Node>.from(node.children)..add(newNode);
+        return node.copyWith(children: newChildren);
+      }
+
+      final updatedChildren = node.children
+          .map((child) => addChildRecursive(child))
+          .toList();
+
+      return node.copyWith(children: updatedChildren);
+    }
+
+    return addChildRecursive(root);
+  }
+
   Node _moveNodeToParent(Node root, String draggedNodeId, String newParentId) {
     // Encontra o node a ser movido
     final nodeToMove = root.findById(draggedNodeId);
@@ -257,6 +324,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 onExpansionChanged: _handleExpansionChanged,
                 onNodeReordered: _handleNodeReordered,
                 onNodeParentChanged: _handleNodeParentChanged,
+                onNodeAdded: _handleNodeAdded,
+                onNodeDeleted: _handleNodeDeleted,
               ),
             ),
           // Janela flutuante com ActionsPanel (sempre visível)
