@@ -15,6 +15,7 @@ import 'widgets/tree_view.dart';
 import 'widgets/draggable_resizable_window.dart';
 import 'widgets/actions_panel.dart';
 import 'widgets/menu_bar.dart';
+import 'widgets/checkpoint_dialog.dart';
 import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
 
@@ -898,6 +899,51 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _handleManageCheckpoints() async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return CheckpointDialog(
+          checkpointManager: _checkpointManager,
+          onRestoreCheckpoint: (checkpointId) async {
+            try {
+              await _checkpointManager.restoreCheckpoint(checkpointId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Checkpoint restaurado com sucesso')),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Erro ao restaurar checkpoint: $e')),
+                );
+              }
+            }
+          },
+          onDeleteCheckpoint: (checkpointId) async {
+            try {
+              await _checkpointManager.deleteCheckpoint(checkpointId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Checkpoint deletado com sucesso')),
+                );
+                // Recria o dialog para atualizar a lista
+                _handleManageCheckpoints();
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Erro ao deletar checkpoint: $e')),
+                );
+              }
+            }
+          },
+        );
+      },
+    );
+  }
+
   String _getWindowTitle() {
     if (_showWelcomeScreen) {
       return 'Smart Document - Sem projeto';
@@ -940,6 +986,7 @@ class _MyHomePageState extends State<MyHomePage> {
             onUndo: _handleUndo,
             onRedo: _handleRedo,
             onCreateCheckpoint: _handleCreateCheckpoint,
+            onManageCheckpoints: _handleManageCheckpoints,
             canUndo: _commandHistory.canUndo,
             canRedo: _commandHistory.canRedo,
             undoDescription: _undoDescription != null ? 'Desfazer: $_undoDescription' : 'Desfazer',

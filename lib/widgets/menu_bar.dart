@@ -9,6 +9,7 @@ class AppMenuBar extends StatelessWidget {
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
   final VoidCallback? onCreateCheckpoint;
+  final VoidCallback? onManageCheckpoints;
   final bool canUndo;
   final bool canRedo;
   final String? undoDescription;
@@ -23,6 +24,7 @@ class AppMenuBar extends StatelessWidget {
     this.onUndo,
     this.onRedo,
     this.onCreateCheckpoint,
+    this.onManageCheckpoints,
     this.canUndo = false,
     this.canRedo = false,
     this.undoDescription,
@@ -76,6 +78,11 @@ class AppMenuBar extends StatelessWidget {
               leadingIcon: const Icon(Icons.bookmark_add),
               onPressed: onCreateCheckpoint,
               child: const Text('Criar Checkpoint...'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.bookmarks),
+              onPressed: onManageCheckpoints,
+              child: const Text('Gerenciar Checkpoints...'),
             ),
           ],
           child: const Text('Editar'),
