@@ -450,10 +450,10 @@ class _MyHomePageState extends State<MyHomePage> {
       return; // Usuário cancelou
     }
 
-    // Seleciona arquivo de projeto
-    final projectPath = await ProjectService.pickProjectFile();
+    // Seleciona pasta do projeto
+    final projectPath = await ProjectService.pickProjectFolder();
     if (projectPath == null) {
-      return; // Usuário cancelou
+      return; // Usuário cancelou ou pasta não tem project.json
     }
 
     // Carrega o projeto
@@ -461,7 +461,9 @@ class _MyHomePageState extends State<MyHomePage> {
     if (loadedNode == null) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao carregar projeto')),
+          const SnackBar(
+            content: Text('Erro ao carregar projeto. Verifique se a pasta contém um arquivo project.json válido.'),
+          ),
         );
       }
       return;

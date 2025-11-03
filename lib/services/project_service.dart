@@ -152,9 +152,9 @@ class ProjectService {
     }
   }
 
-  /// Abre diálogo para selecionar arquivo project.json
-  /// Retorna o caminho da pasta do projeto (diretório pai do arquivo), ou null se cancelado
-  static Future<String?> pickProjectFile() async {
+  /// Abre diálogo para selecionar a pasta do projeto
+  /// Retorna o caminho da pasta do projeto, ou null se cancelado
+  static Future<String?> pickProjectFolder() async {
     try {
       // Tenta obter a última pasta usada
       String? initialDirectory = await Preferences.getLastProjectPath();
@@ -169,37 +169,30 @@ class ProjectService {
         }
       }
 
-      // Abre diálogo para selecionar arquivo project.json
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        dialogTitle: 'Abrir Projeto',
+      // Abre diálogo para selecionar pasta do projeto
+      String? selectedFolder = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Abrir Projeto - Selecione a pasta do projeto',
         initialDirectory: initialDirectory,
       );
 
-      if (result == null || result.files.single.path == null) {
+      if (selectedFolder == null) {
         return null;
       }
 
-      final filePath = result.files.single.path!;
-      final file = File(filePath);
-
-      // Verifica se o arquivo é project.json
-      final fileName = filePath.split(Platform.pathSeparator).last;
-      if (fileName != projectFileName) {
-        print('⚠️ O arquivo selecionado não é $projectFileName');
-        // Ainda assim, retorna o diretório pai
+      // Verifica se o arquivo project.json existe na pasta selecionada
+      final projectFile = File('$selectedFolder/$projectFileName');
+      if (!projectFile.existsSync()) {
+        print('⚠️ Arquivo $projectFileName não encontrado na pasta selecionada: $selectedFolder');
+        // Retorna null - o main.dart mostrará uma mensagem de erro ao usuário
+        return null;
       }
 
-      // Retorna o diretório pai do arquivo
-      final projectPath = file.parent.path;
-
       // Salva o caminho nas preferências
-      await Preferences.setLastProjectPath(projectPath);
+      await Preferences.setLastProjectPath(selectedFolder);
 
-      return projectPath;
+      return selectedFolder;
     } catch (e) {
-      print('Erro ao selecionar arquivo de projeto: $e');
+      print('Erro ao selecionar pasta de projeto: $e');
       return null;
     }
   }
