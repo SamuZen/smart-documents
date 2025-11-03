@@ -27,12 +27,7 @@ class TreeNodeTile extends StatelessWidget {
 
     return InkWell(
       onTap: () {
-        // Se tem filhos, toggle expande/colapsa
-        // Senão, ou além disso, seleciona o item
-        if (hasChildren && onToggle != null) {
-          onToggle?.call();
-        }
-        // Sempre seleciona o item quando clicar
+        // Apenas seleciona o item quando clicar nele (não expande/colapsa)
         onTap?.call();
       },
       child: Container(
@@ -50,6 +45,7 @@ class TreeNodeTile extends StatelessWidget {
                   // Toggle apenas quando clicar na setinha
                   onToggle?.call();
                 },
+                behavior: HitTestBehavior.opaque,
                 child: AnimatedRotation(
                   turns: isExpanded ? 0.25 : 0.0,
                   duration: const Duration(milliseconds: 200),
