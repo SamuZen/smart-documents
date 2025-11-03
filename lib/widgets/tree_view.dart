@@ -67,16 +67,30 @@ class _TreeViewState extends State<TreeView> {
     print('   _selectedNodeId anterior: $_selectedNodeId');
     print('   _editingNodeId: $_editingNodeId');
     developer.log('TreeView: _selectNode chamado. nodeId: $nodeId, _editingNodeId: $_editingNodeId');
+    
+    // Se está editando outro node, cancela a edição primeiro
+    if (_editingNodeId != null && _editingNodeId != nodeId) {
+      print('⚠️ [TreeView] Cancelando edição porque outro node foi selecionado');
+      developer.log('TreeView: Cancelando edição porque outro node foi selecionado');
+      
+      // Limpa o callback de confirmação do node que estava editando
+      _confirmCallbacks.remove(_editingNodeId);
+      
+      // Garante que o foco volte para o TreeView
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _treeFocusNode.requestFocus();
+      });
+    }
+    
     setState(() {
       _selectedNodeId = nodeId;
       // Cancela modo de edição ao selecionar outro nó
       if (_editingNodeId != null && _editingNodeId != nodeId) {
-        print('⚠️ [TreeView] Cancelando edição porque outro node foi selecionado');
-        developer.log('TreeView: Cancelando edição porque outro node foi selecionado');
         _editingNodeId = null;
       }
     });
     print('   _selectedNodeId após setState: $_selectedNodeId');
+    print('   _editingNodeId após setState: $_editingNodeId');
   }
 
   void _cancelEditing() {
@@ -139,6 +153,9 @@ class _TreeViewState extends State<TreeView> {
       print('   Nome antigo: "$oldName"');
       developer.log('TreeView: Nome antigo do node: "$oldName"');
       
+      // Limpa o callback de confirmação após salvar
+      _confirmCallbacks.remove(nodeId);
+      
       // Primeiro atualiza localmente para feedback imediato
       setState(() {
         _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
@@ -170,10 +187,18 @@ class _TreeViewState extends State<TreeView> {
     print('🛑 [TreeView] CANCELANDO EDIÇÃO');
     print('   _editingNodeId antes: $_editingNodeId');
     developer.log('TreeView: _handleCancelEditing chamado. _editingNodeId: $_editingNodeId');
+    
+    // Limpa o callback de confirmação
+    if (_editingNodeId != null) {
+      _confirmCallbacks.remove(_editingNodeId);
+      print('   Callback de confirmação removido para: $_editingNodeId');
+    }
+    
     setState(() {
       _editingNodeId = null;
     });
     print('   _editingNodeId após setState: $_editingNodeId');
+    
     // Garante que o foco volte para o TreeView para capturar atalhos de teclado
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _treeFocusNode.requestFocus();
