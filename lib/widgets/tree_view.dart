@@ -37,6 +37,23 @@ class _TreeViewState extends State<TreeView> {
   void _selectNode(String? nodeId) {
     setState(() {
       _selectedNodeId = nodeId;
+      // Cancela modo de edição ao selecionar outro nó
+      if (_editingNodeId != null && _editingNodeId != nodeId) {
+        _editingNodeId = null;
+      }
+    });
+  }
+
+  void _cancelEditing() {
+    setState(() {
+      _editingNodeId = null;
+    });
+  }
+
+  void _confirmEditing() {
+    // Por enquanto apenas cancela (mock) - depois implementaremos salvar
+    setState(() {
+      _editingNodeId = null;
     });
   }
 
@@ -45,6 +62,8 @@ class _TreeViewState extends State<TreeView> {
     return Shortcuts(
       shortcuts: {
         LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
+        LogicalKeySet(LogicalKeyboardKey.escape): const _CancelEditingIntent(),
+        LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmEditingIntent(),
       },
       child: Actions(
         actions: {
@@ -56,6 +75,18 @@ class _TreeViewState extends State<TreeView> {
                   _editingNodeId = _selectedNodeId;
                 });
               }
+              return null;
+            },
+          ),
+          _CancelEditingIntent: CallbackAction<_CancelEditingIntent>(
+            onInvoke: (_) {
+              _cancelEditing();
+              return null;
+            },
+          ),
+          _ConfirmEditingIntent: CallbackAction<_ConfirmEditingIntent>(
+            onInvoke: (_) {
+              _confirmEditing();
               return null;
             },
           ),
@@ -106,5 +137,15 @@ class _TreeViewState extends State<TreeView> {
 // Intent para detectar F2
 class _F2Intent extends Intent {
   const _F2Intent();
+}
+
+// Intent para cancelar edição (ESC)
+class _CancelEditingIntent extends Intent {
+  const _CancelEditingIntent();
+}
+
+// Intent para confirmar edição (Enter)
+class _ConfirmEditingIntent extends Intent {
+  const _ConfirmEditingIntent();
 }
 
