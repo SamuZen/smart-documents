@@ -16,6 +16,7 @@ class TreeView extends StatefulWidget {
 
 class _TreeViewState extends State<TreeView> {
   final Set<String> _expandedNodes = {};
+  String? _selectedNodeId;
 
   void _toggleExpand(String nodeId) {
     setState(() {
@@ -29,6 +30,12 @@ class _TreeViewState extends State<TreeView> {
 
   bool _isExpanded(String nodeId) {
     return _expandedNodes.contains(nodeId);
+  }
+
+  void _selectNode(String? nodeId) {
+    setState(() {
+      _selectedNodeId = nodeId;
+    });
   }
 
   @override
@@ -46,16 +53,18 @@ class _TreeViewState extends State<TreeView> {
     final nodeId = node.id;
 
     // Adiciona o próprio node
-    widgets.add(
-      TreeNodeTile(
-        key: ValueKey(nodeId),
-        node: node,
-        depth: depth,
-        isExpanded: isExpanded,
-        hasChildren: hasChildren,
-        onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
-      ),
-    );
+      widgets.add(
+        TreeNodeTile(
+          key: ValueKey(nodeId),
+          node: node,
+          depth: depth,
+          isExpanded: isExpanded,
+          hasChildren: hasChildren,
+          isSelected: _selectedNodeId == nodeId,
+          onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
+          onTap: () => _selectNode(nodeId),
+        ),
+      );
 
     // Adiciona recursivamente os filhos apenas se expandido
     if (hasChildren && isExpanded) {
