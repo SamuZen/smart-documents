@@ -2,10 +2,20 @@ import 'package:flutter/material.dart';
 import 'dart:developer' as developer;
 import 'models/node.dart';
 import 'services/project_service.dart';
+import 'services/command_history.dart';
+import 'services/command_registry.dart';
+import 'services/command_registry_helper.dart';
+import 'services/checkpoint_manager.dart';
+import 'commands/rename_node_command.dart';
+import 'commands/add_node_command.dart';
+import 'commands/delete_node_command.dart';
+import 'commands/reorder_node_command.dart';
+import 'commands/move_node_command.dart';
 import 'widgets/tree_view.dart';
 import 'widgets/draggable_resizable_window.dart';
 import 'widgets/actions_panel.dart';
 import 'widgets/menu_bar.dart';
+import 'widgets/checkpoint_dialog.dart';
 import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
 
@@ -50,6 +60,13 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _hasUnsavedChanges = false;
   bool _showWelcomeScreen = true; // Inicia mostrando a tela de boas-vindas
 
+  // Sistema de comandos
+  late CommandHistory _commandHistory;
+  late CheckpointManager _checkpointManager;
+  final CommandRegistry _commandRegistry = CommandRegistry.instance;
+  String? _undoDescription;
+  String? _redoDescription;
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +75,50 @@ class _MyHomePageState extends State<MyHomePage> {
       id: 'root',
       name: 'Novo Projeto',
     );
+
+    // Inicializa sistema de comandos
+    _initializeCommandSystem();
+  }
+
+  void _initializeCommandSystem() {
+    // Registra todos os comandos
+    CommandRegistryHelper.registerAllCommands();
+
+    // Inicializa CommandHistory
+    _commandHistory = CommandHistory();
+    _commandHistory.onTreeChanged = (Node updatedTree) {
+      setState(() {
+        _rootNode = updatedTree;
+        _markProjectAsModified();
+      });
+    };
+    _commandHistory.onHistoryChanged = () {
+      _updateHistoryState();
+    };
+
+    // Inicializa CheckpointManager
+    _checkpointManager = CheckpointManager();
+    _checkpointManager.onTreeChanged = (Node updatedTree) {
+      setState(() {
+        _rootNode = updatedTree;
+        _hasUnsavedChanges = false; // Checkpoints não marcam como modificado
+        _commandHistory.clear(); // Limpa histórico ao restaurar checkpoint
+      });
+    };
+
+    // Conecta CommandHistory e CheckpointManager
+    _commandHistory.setCheckpointManager(_checkpointManager);
+    _checkpointManager.setCommandHistory(_commandHistory);
+
+    // Atualiza estado inicial do histórico
+    _updateHistoryState();
+  }
+
+  void _updateHistoryState() {
+    setState(() {
+      _undoDescription = _commandHistory.undoDescription;
+      _redoDescription = _commandHistory.redoDescription;
+    });
   }
 
   void _handleSelectionChanged(String? nodeId) {
@@ -86,56 +147,142 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  void _handleNodeReordered(String draggedNodeId, String targetNodeId, bool insertBefore) {
+  void _handleNodeReordered(String draggedNodeId, String targetNodeId, bool insertBefore) async {
     developer.log('MyHomePage: _handleNodeReordered chamado. draggedNodeId: $draggedNodeId, targetNodeId: $targetNodeId, insertBefore: $insertBefore');
     
-    // A TreeView já atualizou localmente, precisamos atualizar a raiz também
-    // Mas a TreeView já fez a atualização interna, então só precisamos sincronizar
-    // Vamos atualizar a raiz para refletir a mudança
-    setState(() {
-      // A árvore já foi atualizada internamente no TreeView, mas precisamos garantir
-      // que o estado aqui também seja atualizado. Como o TreeView gerencia seu próprio estado,
-      // vamos usar o didUpdateWidget para sincronizar.
-      // Por enquanto, vamos atualizar diretamente através de uma busca recursiva
-      _rootNode = _reorderNodeInTree(_rootNode, draggedNodeId, targetNodeId, insertBefore);
-      _markProjectAsModified();
-    });
+    // Encontra o parent comum
+    final draggedParent = Node.findParent(_rootNode, draggedNodeId);
+    final targetParent = Node.findParent(_rootNode, targetNodeId);
+    
+    // Verifica se são irmãos (mesmo parent)
+    String? parentId;
+    if (draggedParent == null && targetParent == null) {
+      parentId = _rootNode.id; // Ambos são filhos da raiz
+    } else if (draggedParent != null && targetParent != null && draggedParent.id == targetParent.id) {
+      parentId = draggedParent.id;
+    } else {
+      return; // Não são irmãos, não pode reordenar
+    }
+    
+    // Encontra índices
+    final parentNode = _rootNode.findById(parentId);
+    if (parentNode == null) return;
+    
+    final oldIndex = parentNode.children.indexWhere((child) => child.id == draggedNodeId);
+    final targetIndex = parentNode.children.indexWhere((child) => child.id == targetNodeId);
+    
+    if (oldIndex == -1 || targetIndex == -1) return;
+    
+    // Calcula novo índice
+    final newTargetIndex = targetIndex > oldIndex ? targetIndex - 1 : targetIndex;
+    final newIndex = insertBefore ? newTargetIndex : newTargetIndex + 1;
+    
+    // Cria e executa comando
+    final command = ReorderNodeCommand(
+      parentNodeId: parentId,
+      draggedNodeId: draggedNodeId,
+      targetNodeId: targetNodeId,
+      insertBefore: insertBefore,
+      oldIndex: oldIndex,
+      newIndex: newIndex.clamp(0, parentNode.children.length - 1),
+    );
+    
+    await _commandHistory.execute(command, _rootNode);
   }
 
-  void _handleNodeParentChanged(String draggedNodeId, String newParentId) {
+  void _handleNodeParentChanged(String draggedNodeId, String newParentId) async {
     developer.log('MyHomePage: _handleNodeParentChanged chamado. draggedNodeId: $draggedNodeId, newParentId: $newParentId');
     
-    // A TreeView já atualizou localmente, precisamos sincronizar com a raiz
-    setState(() {
-      _rootNode = _moveNodeToParent(_rootNode, draggedNodeId, newParentId);
-      _markProjectAsModified();
-    });
+    // Encontra informações do parent antigo
+    final oldParent = Node.findParent(_rootNode, draggedNodeId);
+    final oldParentId = oldParent?.id ?? _rootNode.id;
+    
+    // Encontra índices
+    final oldParentNode = _rootNode.findById(oldParentId);
+    final newParentNode = _rootNode.findById(newParentId);
+    
+    if (oldParentNode == null || newParentNode == null) return;
+    
+    final oldIndex = oldParentNode.children.indexWhere((child) => child.id == draggedNodeId);
+    final newIndex = newParentNode.children.length; // Adiciona no final
+    
+    // Cria e executa comando
+    final command = MoveNodeCommand(
+      draggedNodeId: draggedNodeId,
+      oldParentId: oldParentId,
+      newParentId: newParentId,
+      oldIndex: oldIndex,
+      newIndex: newIndex,
+    );
+    
+    await _commandHistory.execute(command, _rootNode);
   }
 
-  void _handleNodeAdded(String parentNodeId, String newNodeId, String newNodeName) {
+  void _handleNodeAdded(String parentNodeId, String newNodeId, String newNodeName) async {
     developer.log('MyHomePage: _handleNodeAdded chamado. parentNodeId: $parentNodeId, newNodeId: $newNodeId, newNodeName: $newNodeName');
     
-    // Atualiza a raiz para sincronizar com a TreeView
-    setState(() {
-      _rootNode = _addNodeToParent(_rootNode, parentNodeId, newNodeId, newNodeName);
-      _markProjectAsModified();
-    });
+    // Cria e executa comando
+    final command = AddNodeCommand(
+      parentNodeId: parentNodeId,
+      newNodeId: newNodeId,
+      newNodeName: newNodeName,
+    );
+    
+    await _commandHistory.execute(command, _rootNode);
   }
 
-  void _handleNodeDeleted(String deletedNodeId) {
+  void _handleNodeDeleted(String deletedNodeId) async {
     developer.log('MyHomePage: _handleNodeDeleted chamado. deletedNodeId: $deletedNodeId');
     
-    // Atualiza a raiz para sincronizar com a TreeView
+    // Encontra o node antes de deletar para obter informações
+    final nodeToDelete = _rootNode.findById(deletedNodeId);
+    if (nodeToDelete == null) {
+      return;
+    }
+    
+    // Não permite deletar a raiz
+    if (deletedNodeId == _rootNode.id) {
+      return;
+    }
+    
+    // Encontra o parent e o índice
+    final parent = Node.findParent(_rootNode, deletedNodeId);
+    final parentId = parent?.id ?? _rootNode.id;
+    
+    // Encontra o índice original
+    final parentNode = _rootNode.findById(parentId);
+    final originalIndex = parentNode?.children.indexWhere((child) => child.id == deletedNodeId) ?? -1;
+    
+    // Cria snapshot completo do node (cópia profunda)
+    final nodeSnapshot = _deepCopyNode(nodeToDelete);
+    
+    // Cria e executa comando
+    final command = DeleteNodeCommand(
+      deletedNodeId: deletedNodeId,
+      parentNodeId: parentId,
+      nodeSnapshot: nodeSnapshot,
+      originalIndex: originalIndex,
+    );
+    
+    await _commandHistory.execute(command, _rootNode);
+    
+    // Limpa estados relacionados
     setState(() {
-      _rootNode = _removeNodeFromTree(_rootNode, deletedNodeId);
-      // Remove do set de nodes expandidos se necessário
       _expandedNodes.remove(deletedNodeId);
-      // Limpa seleção se o node deletado estava selecionado
       if (_selectedNodeId == deletedNodeId) {
         _selectedNodeId = null;
       }
-      _markProjectAsModified();
     });
+  }
+  
+  // Helper para criar cópia profunda de um Node
+  Node _deepCopyNode(Node node) {
+    final copiedChildren = node.children.map((child) => _deepCopyNode(child)).toList();
+    return Node(
+      id: node.id,
+      name: node.name,
+      children: copiedChildren,
+    );
   }
 
   Node _removeNodeFromTree(Node root, String nodeId) {
@@ -251,18 +398,18 @@ class _MyHomePageState extends State<MyHomePage> {
     return _expandedNodes.contains(_selectedNodeId);
   }
 
-  void _updateRootNode(String nodeId, String newName) {
+  void _updateRootNode(String nodeId, String newName) async {
     developer.log('MyHomePage: _updateRootNode chamado. nodeId: $nodeId, newName: "$newName"');
-    final oldName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
-    developer.log('MyHomePage: Nome antigo do node: "$oldName"');
+    final oldName = _rootNode.findById(nodeId)?.name ?? '';
     
-    setState(() {
-      _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
-      _markProjectAsModified();
-    });
+    // Cria e executa comando
+    final command = RenameNodeCommand(
+      nodeId: nodeId,
+      oldName: oldName,
+      newName: newName,
+    );
     
-    final updatedName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
-    developer.log('MyHomePage: Após atualização, nome do node: "$updatedName"');
+    await _commandHistory.execute(command, _rootNode);
   }
 
   Node _updateNodeInTree(Node node, String nodeId, String newName) {
@@ -440,6 +587,10 @@ class _MyHomePageState extends State<MyHomePage> {
       _expandedNodes.clear();
     });
 
+    // Limpa histórico de comandos
+    _commandHistory.clear();
+    _checkpointManager.clearCheckpoints();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Projeto "$projectName" criado com sucesso')),
@@ -486,6 +637,10 @@ class _MyHomePageState extends State<MyHomePage> {
       _expandedNodes.clear();
     });
 
+    // Limpa histórico de comandos
+    _commandHistory.clear();
+    _checkpointManager.clearCheckpoints();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Projeto carregado com sucesso')),
@@ -527,6 +682,10 @@ class _MyHomePageState extends State<MyHomePage> {
       _selectedNodeId = null;
       _expandedNodes.clear();
     });
+
+    // Limpa histórico de comandos
+    _commandHistory.clear();
+    _checkpointManager.clearCheckpoints();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -668,6 +827,121 @@ class _MyHomePageState extends State<MyHomePage> {
       _selectedNodeId = null;
       _expandedNodes.clear();
     });
+
+    // Limpa histórico de comandos
+    _commandHistory.clear();
+    _checkpointManager.clearCheckpoints();
+  }
+
+  // ========== Métodos de Undo/Redo ==========
+
+  Future<void> _handleUndo() async {
+    await _commandHistory.undo(_rootNode);
+  }
+
+  Future<void> _handleRedo() async {
+    await _commandHistory.redo(_rootNode);
+  }
+
+  Future<void> _handleCreateCheckpoint() async {
+    final checkpointName = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        final textController = TextEditingController();
+        return AlertDialog(
+          title: const Text('Criar Checkpoint'),
+          content: TextField(
+            controller: textController,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nome do checkpoint (opcional)',
+              hintText: 'Ex: Antes de importação LLM',
+            ),
+            onSubmitted: (value) {
+              Navigator.of(dialogContext).pop(value.trim().isEmpty ? null : value.trim());
+            },
+          ),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = textController.text.trim();
+                Navigator.of(dialogContext).pop(name.isEmpty ? null : name);
+              },
+              child: const Text('Criar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    // Se checkpointName é null, usuário cancelou o dialog
+    if (checkpointName == null) {
+      return;
+    }
+
+    try {
+      final checkpointId = await _checkpointManager.createCheckpoint(checkpointName.isEmpty ? null : checkpointName, _rootNode);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Checkpoint criado${checkpointName.isEmpty ? "" : ": $checkpointName"}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao criar checkpoint: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleManageCheckpoints() async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return CheckpointDialog(
+          checkpointManager: _checkpointManager,
+          onRestoreCheckpoint: (checkpointId) async {
+            try {
+              await _checkpointManager.restoreCheckpoint(checkpointId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Checkpoint restaurado com sucesso')),
+                );
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Erro ao restaurar checkpoint: $e')),
+                );
+              }
+            }
+          },
+          onDeleteCheckpoint: (checkpointId) async {
+            try {
+              await _checkpointManager.deleteCheckpoint(checkpointId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Checkpoint deletado com sucesso')),
+                );
+                // Recria o dialog para atualizar a lista
+                _handleManageCheckpoints();
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Erro ao deletar checkpoint: $e')),
+                );
+              }
+            }
+          },
+        );
+      },
+    );
   }
 
   String _getWindowTitle() {
@@ -709,6 +983,14 @@ class _MyHomePageState extends State<MyHomePage> {
             onOpenProject: _handleOpenProject,
             onSaveProject: _handleSaveProject,
             onCloseProject: _handleCloseProject,
+            onUndo: _handleUndo,
+            onRedo: _handleRedo,
+            onCreateCheckpoint: _handleCreateCheckpoint,
+            onManageCheckpoints: _handleManageCheckpoints,
+            canUndo: _commandHistory.canUndo,
+            canRedo: _commandHistory.canRedo,
+            undoDescription: _undoDescription != null ? 'Desfazer: $_undoDescription' : 'Desfazer',
+            redoDescription: _redoDescription != null ? 'Refazer: $_redoDescription' : 'Refazer',
           ),
           // Conteúdo principal
           Expanded(
@@ -764,6 +1046,8 @@ class _MyHomePageState extends State<MyHomePage> {
                             onNodeParentChanged: _handleNodeParentChanged,
                             onNodeAdded: _handleNodeAdded,
                             onNodeDeleted: _handleNodeDeleted,
+                            onUndo: _handleUndo,
+                            onRedo: _handleRedo,
                           ),
                         ),
                       // Janela flutuante com ActionsPanel (sempre visível)

@@ -6,6 +6,14 @@ class AppMenuBar extends StatelessWidget {
   final VoidCallback? onOpenProject;
   final VoidCallback? onSaveProject;
   final VoidCallback? onCloseProject;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
+  final VoidCallback? onCreateCheckpoint;
+  final VoidCallback? onManageCheckpoints;
+  final bool canUndo;
+  final bool canRedo;
+  final String? undoDescription;
+  final String? redoDescription;
 
   const AppMenuBar({
     super.key,
@@ -13,6 +21,14 @@ class AppMenuBar extends StatelessWidget {
     this.onOpenProject,
     this.onSaveProject,
     this.onCloseProject,
+    this.onUndo,
+    this.onRedo,
+    this.onCreateCheckpoint,
+    this.onManageCheckpoints,
+    this.canUndo = false,
+    this.canRedo = false,
+    this.undoDescription,
+    this.redoDescription,
   });
 
   @override
@@ -44,6 +60,32 @@ class AppMenuBar extends StatelessWidget {
             ),
           ],
           child: const Text('Arquivo'),
+        ),
+        SubmenuButton(
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.undo),
+              onPressed: canUndo ? onUndo : null,
+              child: Text(undoDescription ?? 'Desfazer'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.redo),
+              onPressed: canRedo ? onRedo : null,
+              child: Text(redoDescription ?? 'Refazer'),
+            ),
+            const Divider(),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.bookmark_add),
+              onPressed: onCreateCheckpoint,
+              child: const Text('Criar Checkpoint...'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.bookmarks),
+              onPressed: onManageCheckpoints,
+              child: const Text('Gerenciar Checkpoints...'),
+            ),
+          ],
+          child: const Text('Editar'),
         ),
       ],
     );

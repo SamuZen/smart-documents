@@ -15,6 +15,8 @@ class TreeView extends StatefulWidget {
   final Function(String draggedNodeId, String newParentId)? onNodeParentChanged;
   final Function(String parentNodeId, String newNodeId, String newNodeName)? onNodeAdded;
   final Function(String deletedNodeId)? onNodeDeleted;
+  final VoidCallback? onUndo;
+  final VoidCallback? onRedo;
 
   const TreeView({
     super.key,
@@ -27,6 +29,8 @@ class TreeView extends StatefulWidget {
     this.onNodeParentChanged,
     this.onNodeAdded,
     this.onNodeDeleted,
+    this.onUndo,
+    this.onRedo,
   });
 
   @override
@@ -884,6 +888,12 @@ class _TreeViewState extends State<TreeView> {
       shortcuts[LogicalKeySet(LogicalKeyboardKey.backspace)] = const _DeleteNodeIntent(); // Backspace também deleta
     }
     
+    // Atalhos de undo/redo (sempre disponíveis, mesmo durante edição)
+    // Quando está editando, o TextField pode capturar essas teclas, mas tentamos processar primeiro
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ)] = const _UndoIntent();
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY)] = const _RedoIntent();
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ)] = const _RedoIntent(); // Ctrl+Shift+Z também é redo
+    
     return shortcuts;
   }
 
@@ -1006,6 +1016,24 @@ class _TreeViewState extends State<TreeView> {
             onInvoke: (_) {
               print('⌨️ [TreeView] DELETE PRESSIONADO - Deletar node');
               _deleteSelectedNode();
+              return null;
+            },
+          ),
+          _UndoIntent: CallbackAction<_UndoIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] CTRL+Z PRESSIONADO - Undo');
+              if (widget.onUndo != null) {
+                widget.onUndo!();
+              }
+              return null;
+            },
+          ),
+          _RedoIntent: CallbackAction<_RedoIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] CTRL+Y PRESSIONADO - Redo');
+              if (widget.onRedo != null) {
+                widget.onRedo!();
+              }
               return null;
             },
           ),
@@ -1232,5 +1260,15 @@ class _AddChildIntent extends Intent {
 // Intent para deletar node (Delete/Backspace)
 class _DeleteNodeIntent extends Intent {
   const _DeleteNodeIntent();
+}
+
+// Intent para undo (Ctrl+Z)
+class _UndoIntent extends Intent {
+  const _UndoIntent();
+}
+
+// Intent para redo (Ctrl+Y ou Ctrl+Shift+Z)
+class _RedoIntent extends Intent {
+  const _RedoIntent();
 }
 
