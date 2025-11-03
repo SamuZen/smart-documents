@@ -13,6 +13,7 @@ class TreeView extends StatefulWidget {
   final Function(String draggedNodeId, String targetNodeId, bool insertBefore)? onNodeReordered;
   final Function(String draggedNodeId, String newParentId)? onNodeParentChanged;
   final Function(String parentNodeId, String newNodeId, String newNodeName)? onNodeAdded;
+  final Function(String deletedNodeId)? onNodeDeleted;
 
   const TreeView({
     super.key,
@@ -24,6 +25,7 @@ class TreeView extends StatefulWidget {
     this.onNodeReordered,
     this.onNodeParentChanged,
     this.onNodeAdded,
+    this.onNodeDeleted,
   });
 
   @override
@@ -360,6 +362,75 @@ class _TreeViewState extends State<TreeView> {
     });
 
     print('✅ [TreeView] Novo child adicionado: $newNodeId');
+  }
+
+  void _deleteSelectedNode() {
+    if (_selectedNodeId == null || _editingNodeId != null) {
+      print('❌ [TreeView] Nenhum node selecionado ou está editando');
+      return;
+    }
+
+    final nodeToDelete = _rootNode.findById(_selectedNodeId!);
+    if (nodeToDelete == null) {
+      print('❌ [TreeView] Node selecionado não encontrado');
+      return;
+    }
+
+    // Não permite deletar a raiz
+    if (_selectedNodeId == _rootNode.id) {
+      print('❌ [TreeView] Não é possível deletar a raiz');
+      return;
+    }
+
+    final deletedNodeId = _selectedNodeId!;
+
+    // Remove o node da árvore
+    Node removeNodeRecursive(Node node) {
+      // Filtra os filhos removendo o node a ser deletado
+      final filteredChildren = node.children
+          .where((child) => child.id != deletedNodeId)
+          .map((child) => removeNodeRecursive(child))
+          .toList();
+
+      return node.copyWith(children: filteredChildren);
+    }
+
+    // Remove o node e limpa estados relacionados
+    setState(() {
+      _rootNode = removeNodeRecursive(_rootNode);
+      // Se o node deletado estava expandido, remove do set
+      _expandedNodes.remove(deletedNodeId);
+      // Se estava editando, cancela edição
+      if (_editingNodeId == deletedNodeId) {
+        _editingNodeId = null;
+      }
+      // Seleciona o próximo node visível ou limpa seleção
+      _selectedNodeId = null;
+    });
+
+    // Tenta selecionar o próximo node visível
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        final visibleNodes = _getVisibleNodes();
+        if (visibleNodes.isNotEmpty) {
+          // Seleciona o primeiro node visível
+          _selectNode(visibleNodes.first.id);
+        } else {
+          // Se não há nodes visíveis, limpa seleção
+          _selectedNodeId = null;
+          if (widget.onSelectionChanged != null) {
+            widget.onSelectionChanged!(null);
+          }
+        }
+
+        // Notifica callback de deleção
+        if (widget.onNodeDeleted != null) {
+          widget.onNodeDeleted!(deletedNodeId);
+        }
+      }
+    });
+
+    print('✅ [TreeView] Node deletado: $deletedNodeId');
   }
 
   // Verifica se são irmãos (mesmo parent) - para determinar se é reordenação
@@ -752,12 +823,14 @@ class _TreeViewState extends State<TreeView> {
       LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowDown): const _CtrlArrowDownIntent(),
     };
     
-    // Só adiciona shortcuts de esquerda/direita e 'n' se não estiver editando
+    // Só adiciona shortcuts de esquerda/direita, 'n' e Delete se não estiver editando
     // Quando está editando, o TextField precisa processar essas teclas
     if (_editingNodeId == null) {
       shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowLeft)] = const _ArrowLeftIntent();
       shortcuts[LogicalKeySet(LogicalKeyboardKey.arrowRight)] = const _ArrowRightIntent();
       shortcuts[LogicalKeySet(LogicalKeyboardKey.keyN)] = const _AddChildIntent();
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.delete)] = const _DeleteNodeIntent();
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.backspace)] = const _DeleteNodeIntent(); // Backspace também deleta
     }
     
     return shortcuts;
@@ -875,6 +948,13 @@ class _TreeViewState extends State<TreeView> {
             onInvoke: (_) {
               print('⌨️ [TreeView] N PRESSIONADO - Adicionar novo child');
               _addNewChild();
+              return null;
+            },
+          ),
+          _DeleteNodeIntent: CallbackAction<_DeleteNodeIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] DELETE PRESSIONADO - Deletar node');
+              _deleteSelectedNode();
               return null;
             },
           ),
@@ -1096,5 +1176,10 @@ class _CtrlArrowDownIntent extends Intent {
 // Intent para adicionar novo child (N)
 class _AddChildIntent extends Intent {
   const _AddChildIntent();
+}
+
+// Intent para deletar node (Delete/Backspace)
+class _DeleteNodeIntent extends Intent {
+  const _DeleteNodeIntent();
 }
 
