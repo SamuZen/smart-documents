@@ -884,7 +884,7 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     try {
-      final checkpointId = await _checkpointManager.createCheckpoint(checkpointName.isEmpty ? null : checkpointName, _rootNode);
+      await _checkpointManager.createCheckpoint(checkpointName.isEmpty ? null : checkpointName, _rootNode);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Checkpoint criado${checkpointName.isEmpty ? "" : ": $checkpointName"}')),
@@ -964,14 +964,78 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(_getWindowTitle()),
         actions: [
-          IconButton(
-            icon: Icon(_showWindow ? Icons.visibility_off : Icons.visibility),
-            onPressed: () {
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.window),
+            tooltip: 'Gerenciar janelas',
+            onSelected: (value) {
               setState(() {
-                _showWindow = !_showWindow;
+                switch (value) {
+                  case 'toggle_navigation':
+                    _showWindow = !_showWindow;
+                    break;
+                  case 'toggle_actions':
+                    _showActionsWindow = !_showActionsWindow;
+                    break;
+                  case 'show_all':
+                    _showWindow = true;
+                    _showActionsWindow = true;
+                    break;
+                  case 'hide_all':
+                    _showWindow = false;
+                    _showActionsWindow = false;
+                    break;
+                }
               });
             },
-            tooltip: _showWindow ? 'Ocultar janela' : 'Mostrar janela',
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'toggle_navigation',
+                child: Row(
+                  children: [
+                    Icon(
+                      _showWindow ? Icons.visibility_off : Icons.visibility,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(_showWindow ? 'Ocultar Navegação' : 'Mostrar Navegação'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'toggle_actions',
+                child: Row(
+                  children: [
+                    Icon(
+                      _showActionsWindow ? Icons.visibility_off : Icons.visibility,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(_showActionsWindow ? 'Ocultar Ações' : 'Mostrar Ações'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'show_all',
+                child: const Row(
+                  children: [
+                    Icon(Icons.visibility, size: 20),
+                    SizedBox(width: 12),
+                    Text('Mostrar Todas'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'hide_all',
+                child: const Row(
+                  children: [
+                    Icon(Icons.visibility_off, size: 20),
+                    SizedBox(width: 12),
+                    Text('Ocultar Todas'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
