@@ -280,15 +280,78 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
 
   void _onResizeUpdate(DragUpdateDetails details) {
     if (_isResizing && _resizeStartSize != null && _resizeStartPosition != null) {
-      setState(() {
+      final mediaQuery = MediaQuery.maybeOf(context);
+      if (mediaQuery != null) {
+        _screenSize = mediaQuery.size;
+        final availableSize = _getAvailableSize(_screenSize!);
+        
         final deltaX = details.globalPosition.dx - _resizeStartPosition!.dx;
         final deltaY = details.globalPosition.dy - _resizeStartPosition!.dy;
         
-        _width = (_resizeStartSize!.width + deltaX)
-            .clamp(widget.minWidth, double.infinity);
-        _height = (_resizeStartSize!.height + deltaY)
-            .clamp(widget.minHeight, double.infinity);
-      });
+        double newWidth = _width;
+        double newHeight = _height;
+        Offset newPosition = _position;
+        
+        if (_dockedZone != null) {
+          // Quando dockado, só permite redimensionar a dimensão "livre"
+          switch (_dockedZone) {
+            case 'left':
+              // Dock à esquerda: redimensiona largura normalmente (da direita para fora)
+              newWidth = (_resizeStartSize!.width + deltaX)
+                  .clamp(widget.minWidth, availableSize.width);
+              newHeight = availableSize.height;
+              newPosition = Offset(0, 0);
+              break;
+              
+            case 'right':
+              // Dock à direita: redimensiona largura invertendo delta (da esquerda para dentro)
+              newWidth = (_resizeStartSize!.width - deltaX)
+                  .clamp(widget.minWidth, availableSize.width);
+              newHeight = availableSize.height;
+              newPosition = Offset(availableSize.width - newWidth, 0);
+              break;
+              
+            case 'top':
+              // Dock no topo: redimensiona altura normalmente (de baixo para fora)
+              newWidth = availableSize.width;
+              newHeight = (_resizeStartSize!.height + deltaY)
+                  .clamp(widget.minHeight, availableSize.height);
+              newPosition = Offset(0, 0);
+              break;
+              
+            case 'bottom':
+              // Dock inferior: redimensiona altura invertendo delta (de cima para dentro)
+              newWidth = availableSize.width;
+              newHeight = (_resizeStartSize!.height - deltaY)
+                  .clamp(widget.minHeight, availableSize.height);
+              newPosition = Offset(0, availableSize.height - newHeight);
+              break;
+          }
+        } else {
+          // Quando não dockado, permite redimensionar livremente
+          newWidth = (_resizeStartSize!.width + deltaX)
+              .clamp(widget.minWidth, double.infinity);
+          newHeight = (_resizeStartSize!.height + deltaY)
+              .clamp(widget.minHeight, double.infinity);
+        }
+        
+        setState(() {
+          _width = newWidth;
+          _height = newHeight;
+          _position = newPosition;
+        });
+      } else {
+        // Fallback se não tiver MediaQuery
+        setState(() {
+          final deltaX = details.globalPosition.dx - _resizeStartPosition!.dx;
+          final deltaY = details.globalPosition.dy - _resizeStartPosition!.dy;
+          
+          _width = (_resizeStartSize!.width + deltaX)
+              .clamp(widget.minWidth, double.infinity);
+          _height = (_resizeStartSize!.height + deltaY)
+              .clamp(widget.minHeight, double.infinity);
+        });
+      }
     }
   }
 
