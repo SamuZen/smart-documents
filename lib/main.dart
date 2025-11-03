@@ -14,10 +14,13 @@ import 'commands/move_node_command.dart';
 import 'widgets/tree_view.dart';
 import 'widgets/draggable_resizable_window.dart';
 import 'widgets/actions_panel.dart';
+import 'widgets/document_editor.dart';
 import 'widgets/menu_bar.dart';
 import 'widgets/checkpoint_dialog.dart';
 import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
+import 'commands/set_node_field_command.dart';
+import 'commands/remove_node_field_command.dart';
 
 void main() {
   runApp(const MyApp());
@@ -51,6 +54,7 @@ class _MyHomePageState extends State<MyHomePage> {
   late Node _rootNode;
   bool _showWindow = true;
   bool _showActionsWindow = true;
+  bool _showDocumentEditor = true;
   String? _selectedNodeId;
   bool _isEditing = false;
   final Set<String> _expandedNodes = {}; // Rastreia nodes expandidos
@@ -282,6 +286,7 @@ class _MyHomePageState extends State<MyHomePage> {
       id: node.id,
       name: node.name,
       children: copiedChildren,
+      fields: Map<String, dynamic>.from(node.fields),
     );
   }
 
@@ -424,6 +429,50 @@ class _MyHomePageState extends State<MyHomePage> {
     }).toList();
     
     return node.copyWith(children: updatedChildren);
+  }
+
+  // ========== Métodos de Edição de Campos ==========
+
+  void _handleFieldChanged(String nodeId, String fieldKey, dynamic fieldValue) async {
+    final node = _rootNode.findById(nodeId);
+    if (node == null) return;
+
+    final oldValue = node.fields[fieldKey];
+    final command = SetNodeFieldCommand(
+      nodeId: nodeId,
+      fieldKey: fieldKey,
+      newValue: fieldValue,
+      oldValue: oldValue,
+    );
+
+    await _commandHistory.execute(command, _rootNode);
+  }
+
+  void _handleFieldRemoved(String nodeId, String fieldKey) async {
+    final node = _rootNode.findById(nodeId);
+    if (node == null) return;
+
+    final removedValue = node.fields[fieldKey];
+    if (removedValue == null) return;
+
+    final command = RemoveNodeFieldCommand(
+      nodeId: nodeId,
+      fieldKey: fieldKey,
+      removedValue: removedValue,
+    );
+
+    await _commandHistory.execute(command, _rootNode);
+  }
+
+  void _handleFieldAdded(String nodeId, String fieldKey, dynamic fieldValue) async {
+    final command = SetNodeFieldCommand(
+      nodeId: nodeId,
+      fieldKey: fieldKey,
+      newValue: fieldValue,
+      oldValue: null, // Campo novo, não tem valor antigo
+    );
+
+    await _commandHistory.execute(command, _rootNode);
   }
 
   // ========== Métodos de Gerenciamento de Projeto ==========
@@ -635,6 +684,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _showWelcomeScreen = false;
       _selectedNodeId = null;
       _expandedNodes.clear();
+      _showDocumentEditor = true; // Reseta para mostrar todas as janelas
     });
 
     // Limpa histórico de comandos
@@ -681,6 +731,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _showWelcomeScreen = false;
       _selectedNodeId = null;
       _expandedNodes.clear();
+      _showDocumentEditor = true; // Reseta para mostrar todas as janelas
     });
 
     // Limpa histórico de comandos
@@ -826,6 +877,7 @@ class _MyHomePageState extends State<MyHomePage> {
       _showWelcomeScreen = true;
       _selectedNodeId = null;
       _expandedNodes.clear();
+      _showDocumentEditor = true; // Reseta para mostrar todas as janelas
     });
 
     // Limpa histórico de comandos
@@ -976,13 +1028,18 @@ class _MyHomePageState extends State<MyHomePage> {
                   case 'toggle_actions':
                     _showActionsWindow = !_showActionsWindow;
                     break;
+                  case 'toggle_document_editor':
+                    _showDocumentEditor = !_showDocumentEditor;
+                    break;
                   case 'show_all':
                     _showWindow = true;
                     _showActionsWindow = true;
+                    _showDocumentEditor = true;
                     break;
                   case 'hide_all':
                     _showWindow = false;
                     _showActionsWindow = false;
+                    _showDocumentEditor = false;
                     break;
                 }
               });
@@ -1011,6 +1068,19 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                     const SizedBox(width: 12),
                     Text(_showActionsWindow ? 'Ocultar Ações' : 'Mostrar Ações'),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'toggle_document_editor',
+                child: Row(
+                  children: [
+                    Icon(
+                      _showDocumentEditor ? Icons.visibility_off : Icons.visibility,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Text(_showDocumentEditor ? 'Ocultar Editor' : 'Mostrar Editor'),
                   ],
                 ),
               ),
@@ -1131,6 +1201,26 @@ class _MyHomePageState extends State<MyHomePage> {
                             selectedNode: _getSelectedNode(),
                             isEditing: _isEditing,
                             isExpanded: _getSelectedNodeExpansionState(),
+                          ),
+                        ),
+                      // Janela flutuante com DocumentEditor
+                      if (_showDocumentEditor)
+                        DraggableResizableWindow(
+                          title: 'Editor de Documento',
+                          initialWidth: 400,
+                          initialHeight: 600,
+                          minWidth: 350,
+                          minHeight: 400,
+                          onClose: () {
+                            setState(() {
+                              _showDocumentEditor = false;
+                            });
+                          },
+                          child: DocumentEditor(
+                            selectedNode: _getSelectedNode(),
+                            onFieldChanged: _handleFieldChanged,
+                            onFieldRemoved: _handleFieldRemoved,
+                            onFieldAdded: _handleFieldAdded,
                           ),
                         ),
                     ],
