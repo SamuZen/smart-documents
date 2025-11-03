@@ -10,6 +10,7 @@ class TreeView extends StatefulWidget {
   final Function(String? nodeId)? onSelectionChanged;
   final Function(bool isEditing, String? nodeId)? onEditingStateChanged;
   final Function(String nodeId, bool isExpanded)? onExpansionChanged;
+  final Function(String draggedNodeId, String targetNodeId, bool insertBefore)? onNodeReordered;
 
   const TreeView({
     super.key,
@@ -18,6 +19,7 @@ class TreeView extends StatefulWidget {
     this.onSelectionChanged,
     this.onEditingStateChanged,
     this.onExpansionChanged,
+    this.onNodeReordered,
   });
 
   @override
@@ -30,6 +32,9 @@ class _TreeViewState extends State<TreeView> {
   String? _selectedNodeId;
   String? _editingNodeId;
   final FocusNode _treeFocusNode = FocusNode();
+  String? _draggedNodeId;
+  String? _draggedOverNodeId; // Node sobre o qual está passando o mouse
+  bool _insertBefore = true; // Se deve inserir antes ou depois do target
 
   @override
   void initState() {
@@ -246,6 +251,111 @@ class _TreeViewState extends State<TreeView> {
       _treeFocusNode.requestFocus();
     });
     developer.log('TreeView: Modo de edição cancelado');
+  }
+
+  void _handleDrop(String draggedNodeId, String targetNodeId) {
+    print('🔄 [TreeView] DROP - draggedNodeId: $draggedNodeId, targetNodeId: $targetNodeId, insertBefore: $_insertBefore');
+    developer.log('TreeView: _handleDrop chamado. draggedNodeId: $draggedNodeId, targetNodeId: $targetNodeId');
+    
+    // Verifica se não está editando
+    if (_editingNodeId != null) {
+      print('❌ Não é possível reordenar durante edição');
+      return;
+    }
+
+    // Encontra os nodes
+    final draggedNode = _rootNode.findById(draggedNodeId);
+    final targetNode = _rootNode.findById(targetNodeId);
+    
+    if (draggedNode == null || targetNode == null) {
+      print('❌ Nodes não encontrados');
+      return;
+    }
+
+    // Encontra os parents
+    final draggedParent = Node.findParent(_rootNode, draggedNodeId);
+    final targetParent = Node.findParent(_rootNode, targetNodeId);
+
+    // Verifica se são irmãos
+    if (draggedParent == null && targetParent == null) {
+      // Ambos são filhos da raiz
+      _reorderInRoot(draggedNodeId, targetNodeId, _insertBefore);
+    } else if (draggedParent != null && targetParent != null && draggedParent.id == targetParent.id) {
+      // Mesmos pais - reordena dentro do parent
+      _reorderInParent(draggedParent.id, draggedNodeId, targetNodeId, _insertBefore);
+    } else {
+      print('❌ Nodes não são irmãos, não é possível reordenar');
+      return;
+    }
+
+    // Limpa estado de drag
+    setState(() {
+      _draggedNodeId = null;
+      _draggedOverNodeId = null;
+    });
+
+    // Notifica callback
+    if (widget.onNodeReordered != null) {
+      widget.onNodeReordered!(draggedNodeId, targetNodeId, _insertBefore);
+    }
+  }
+
+  void _reorderInRoot(String draggedNodeId, String targetNodeId, bool insertBefore) {
+    print('📦 Reordenando na raiz');
+    final children = List<Node>.from(_rootNode.children);
+    
+    // Remove o node arrastado
+    final draggedIndex = children.indexWhere((node) => node.id == draggedNodeId);
+    if (draggedIndex == -1) return;
+    final draggedNode = children.removeAt(draggedIndex);
+    
+    // Encontra posição do target
+    final targetIndex = children.indexWhere((node) => node.id == targetNodeId);
+    if (targetIndex == -1) {
+      // Se não encontrou (foi removido acima), adiciona no final
+      children.add(draggedNode);
+    } else {
+      // Insere na posição correta
+      final insertIndex = insertBefore ? targetIndex : targetIndex + 1;
+      children.insert(insertIndex.clamp(0, children.length), draggedNode);
+    }
+    
+    setState(() {
+      _rootNode = _rootNode.copyWith(children: children);
+    });
+  }
+
+  void _reorderInParent(String parentId, String draggedNodeId, String targetNodeId, bool insertBefore) {
+    print('📦 Reordenando no parent: $parentId');
+    
+    Node? updateNodeRecursive(Node node) {
+      if (node.id == parentId) {
+        final children = List<Node>.from(node.children);
+        
+        // Remove o node arrastado
+        final draggedIndex = children.indexWhere((child) => child.id == draggedNodeId);
+        if (draggedIndex == -1) return node;
+        final draggedNode = children.removeAt(draggedIndex);
+        
+        // Encontra posição do target
+        final targetIndex = children.indexWhere((child) => child.id == targetNodeId);
+        if (targetIndex == -1) {
+          children.add(draggedNode);
+        } else {
+          final insertIndex = insertBefore ? targetIndex : targetIndex + 1;
+          children.insert(insertIndex.clamp(0, children.length), draggedNode);
+        }
+        
+        return node.copyWith(children: children);
+      }
+      
+      final updatedChildren = node.children.map((child) => updateNodeRecursive(child) ?? child).toList();
+      return node.copyWith(children: updatedChildren);
+    }
+    
+    setState(() {
+      _rootNode = updateNodeRecursive(_rootNode) ?? _rootNode;
+    });
   }
 
   /// Retorna lista plana de todos os nodes visíveis na ordem que aparecem na tela
@@ -594,37 +704,136 @@ class _TreeViewState extends State<TreeView> {
     final isEditing = _editingNodeId == nodeId;
     developer.log('TreeView: _buildTreeNodes - nodeId: $nodeId, isEditing: $isEditing, node.name: "${node.name}"');
     
+    // Verifica se pode aceitar drop neste node
+    bool canAcceptDrop(String draggedId) {
+      if (draggedId == nodeId) return false; // Não pode soltar em si mesmo
+      
+      final draggedNode = _rootNode.findById(draggedId);
+      if (draggedNode == null) return false;
+      
+      // Verifica se o node target é descendente do node arrastado (não pode)
+      final targetNode = _rootNode.findById(nodeId);
+      if (targetNode == null) return false;
+      
+      if (Node.isDescendantOf(_rootNode, draggedId, nodeId)) return false;
+      
+      // Verifica se são irmãos (mesmo parent)
+      final draggedParent = Node.findParent(_rootNode, draggedId);
+      final targetParent = Node.findParent(_rootNode, nodeId);
+      
+      // Se ambos têm o mesmo parent (ou ambos são filhos da raiz), pode aceitar
+      if (draggedParent == null && targetParent == null) {
+        return true; // Ambos são filhos da raiz
+      }
+      
+      if (draggedParent != null && targetParent != null) {
+        return draggedParent.id == targetParent.id; // Mesmos pais
+      }
+      
+      return false;
+    }
+
+    final isDraggedOver = _draggedOverNodeId == nodeId && 
+                         _draggedNodeId != null && 
+                         canAcceptDrop(_draggedNodeId!);
+    
     widgets.add(
-      TreeNodeTile(
-        key: ValueKey(nodeId),
-        node: node,
-        depth: depth,
-        isExpanded: isExpanded,
-        hasChildren: hasChildren,
-        isSelected: _selectedNodeId == nodeId,
-        isEditing: isEditing,
-        onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
-        onTap: () => _selectNode(nodeId),
-        onNameChanged: isEditing
-            ? (newName) {
-                developer.log('TreeView: Callback onNameChanged chamado diretamente para node $nodeId com "$newName"');
-                _handleNameChanged(nodeId, newName);
-              }
-            : null,
-        onCancelEditing: isEditing
-            ? () {
-                developer.log('TreeView: Callback onCancelEditing chamado diretamente para node $nodeId');
-                _handleCancelEditing();
-              }
-            : null,
-        onConfirmEditing: isEditing
-            ? (confirmFn) {
-                print('📞 [TreeView] Registrando função de confirmação para node $nodeId');
-                // Armazena a função confirmEditing do TreeNodeTile
-                // que será chamada quando Enter for pressionado via Shortcuts
-                _confirmCallbacks[nodeId] = confirmFn;
-              }
-            : null,
+      DragTarget<String>(
+        onWillAccept: (data) {
+          if (data == null || data == nodeId) return false;
+          return canAcceptDrop(data);
+        },
+        onAccept: (draggedId) {
+          _handleDrop(draggedId, nodeId);
+        },
+        onLeave: (_) {
+          setState(() {
+            _draggedOverNodeId = null;
+          });
+        },
+        onMove: (details) {
+          // Detecta se está na metade superior (inserir antes) ou inferior (inserir depois)
+          setState(() {
+            _draggedOverNodeId = nodeId;
+            // Usa offsetY relativo para determinar posição
+            // Como não temos acesso direto ao offset, vamos usar uma heurística baseada no centro
+            _insertBefore = details.offset.dy < 20; // Se está perto do topo, insere antes
+          });
+        },
+        builder: (context, candidateData, rejectedData) {
+          final isActive = candidateData.isNotEmpty || rejectedData.isNotEmpty;
+          final isValid = candidateData.isNotEmpty && canAcceptDrop(_draggedNodeId ?? '');
+          final isInvalid = rejectedData.isNotEmpty || 
+                           (_draggedNodeId != null && !canAcceptDrop(_draggedNodeId!));
+          
+          return Container(
+            decoration: BoxDecoration(
+              color: isActive && isValid
+                  ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                  : isActive && isInvalid
+                      ? Colors.red.withOpacity(0.1)
+                      : Colors.transparent,
+              border: isDraggedOver && isValid
+                  ? Border(
+                      top: _insertBefore
+                          ? BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2,
+                            )
+                          : BorderSide.none,
+                      bottom: !_insertBefore
+                          ? BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2,
+                            )
+                          : BorderSide.none,
+                    )
+                  : null,
+            ),
+            child: TreeNodeTile(
+              key: ValueKey(nodeId),
+              node: node,
+              depth: depth,
+              isExpanded: isExpanded,
+              hasChildren: hasChildren,
+              isSelected: _selectedNodeId == nodeId,
+              isEditing: isEditing,
+              onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
+              onTap: () => _selectNode(nodeId),
+              onDragStart: () {
+                setState(() {
+                  _draggedNodeId = nodeId;
+                });
+              },
+              onDragEnd: () {
+                setState(() {
+                  _draggedNodeId = null;
+                  _draggedOverNodeId = null;
+                });
+              },
+              onNameChanged: isEditing
+                  ? (newName) {
+                      developer.log('TreeView: Callback onNameChanged chamado diretamente para node $nodeId com "$newName"');
+                      _handleNameChanged(nodeId, newName);
+                    }
+                  : null,
+              onCancelEditing: isEditing
+                  ? () {
+                      developer.log('TreeView: Callback onCancelEditing chamado diretamente para node $nodeId');
+                      _handleCancelEditing();
+                    }
+                  : null,
+              onConfirmEditing: isEditing
+                  ? (confirmFn) {
+                      print('📞 [TreeView] Registrando função de confirmação para node $nodeId');
+                      // Armazena a função confirmEditing do TreeNodeTile
+                      // que será chamada quando Enter for pressionado via Shortcuts
+                      _confirmCallbacks[nodeId] = confirmFn;
+                    }
+                  : null,
+            ),
+          );
+        },
       ),
     );
 

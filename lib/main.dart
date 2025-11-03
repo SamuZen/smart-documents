@@ -74,6 +74,44 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _handleNodeReordered(String draggedNodeId, String targetNodeId, bool insertBefore) {
+    developer.log('MyHomePage: _handleNodeReordered chamado. draggedNodeId: $draggedNodeId, targetNodeId: $targetNodeId, insertBefore: $insertBefore');
+    
+    // A TreeView já atualizou localmente, precisamos atualizar a raiz também
+    // Mas a TreeView já fez a atualização interna, então só precisamos sincronizar
+    // Vamos atualizar a raiz para refletir a mudança
+    setState(() {
+      // A árvore já foi atualizada internamente no TreeView, mas precisamos garantir
+      // que o estado aqui também seja atualizado. Como o TreeView gerencia seu próprio estado,
+      // vamos usar o didUpdateWidget para sincronizar.
+      // Por enquanto, vamos atualizar diretamente através de uma busca recursiva
+      _rootNode = _reorderNodeInTree(_rootNode, draggedNodeId, targetNodeId, insertBefore);
+    });
+  }
+
+  Node _reorderNodeInTree(Node node, String draggedNodeId, String targetNodeId, bool insertBefore) {
+    // Verifica se algum filho direto precisa ser reordenado
+    final draggedIndex = node.children.indexWhere((child) => child.id == draggedNodeId);
+    final targetIndex = node.children.indexWhere((child) => child.id == targetNodeId);
+    
+    if (draggedIndex != -1 && targetIndex != -1) {
+      // Reordena os filhos
+      final children = List<Node>.from(node.children);
+      final draggedNode = children.removeAt(draggedIndex);
+      final newTargetIndex = targetIndex > draggedIndex ? targetIndex - 1 : targetIndex;
+      final insertIndex = insertBefore ? newTargetIndex : newTargetIndex + 1;
+      children.insert(insertIndex.clamp(0, children.length), draggedNode);
+      return node.copyWith(children: children);
+    }
+    
+    // Procura recursivamente nos filhos
+    final updatedChildren = node.children.map((child) => 
+      _reorderNodeInTree(child, draggedNodeId, targetNodeId, insertBefore)
+    ).toList();
+    
+    return node.copyWith(children: updatedChildren);
+  }
+
   Node? _getSelectedNode() {
     if (_selectedNodeId == null) return null;
     return _rootNode.findById(_selectedNodeId!);
@@ -171,6 +209,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 onSelectionChanged: _handleSelectionChanged,
                 onEditingStateChanged: _handleEditingStateChanged,
                 onExpansionChanged: _handleExpansionChanged,
+                onNodeReordered: _handleNodeReordered,
               ),
             ),
           // Janela flutuante com ActionsPanel (sempre visível)

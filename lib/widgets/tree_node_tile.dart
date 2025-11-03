@@ -14,6 +14,8 @@ class TreeNodeTile extends StatefulWidget {
   final Function(String)? onNameChanged;
   final VoidCallback? onCancelEditing;
   final Function(VoidCallback)? onConfirmEditing; // Recebe uma função que será chamada quando Enter for pressionado
+  final VoidCallback? onDragStart;
+  final VoidCallback? onDragEnd;
 
   const TreeNodeTile({
     super.key,
@@ -28,6 +30,8 @@ class TreeNodeTile extends StatefulWidget {
     this.onNameChanged,
     this.onCancelEditing,
     this.onConfirmEditing,
+    this.onDragStart,
+    this.onDragEnd,
   });
 
   @override
@@ -141,101 +145,158 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
+  Widget _buildTileContent() {
     final indent = widget.depth * 24.0;
-
-    return InkWell(
-        onTap: () {
-          // Apenas seleciona o item quando clicar nele (não expande/colapsa)
-          widget.onTap?.call();
-        },
-        child: Container(
-          color: widget.isSelected 
-            ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-            : Colors.transparent,
-          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-          child: Row(
-            children: [
-              SizedBox(width: indent),
-              // Ícone de expandir/colapsar (se tiver filhos) - clicável separadamente
-              if (widget.hasChildren)
-                GestureDetector(
-                  onTap: () {
-                    // Toggle apenas quando clicar na setinha
-                    widget.onToggle?.call();
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: AnimatedRotation(
-                    turns: widget.isExpanded ? 0.25 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: 20,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                )
-              else
-                const SizedBox(width: 20),
-              Icon(
-                widget.node.isLeaf ? Icons.insert_drive_file : Icons.folder,
-                size: 20,
-                color: widget.node.isLeaf
-                    ? Colors.blueGrey
-                    : Theme.of(context).colorScheme.primary,
+    
+    return Container(
+      color: widget.isSelected 
+        ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+        : Colors.transparent,
+      padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
+      child: Row(
+        children: [
+          SizedBox(width: indent),
+          // Ícone de drag handle (visível apenas quando não está editando)
+          if (!widget.isEditing)
+            Icon(
+              Icons.drag_handle,
+              size: 16,
+              color: Colors.grey[400],
+            )
+          else
+            const SizedBox(width: 16),
+          // Ícone de expandir/colapsar (se tiver filhos) - clicável separadamente
+          if (widget.hasChildren)
+            GestureDetector(
+              onTap: () {
+                // Toggle apenas quando clicar na setinha
+                widget.onToggle?.call();
+              },
+              behavior: HitTestBehavior.opaque,
+              child: AnimatedRotation(
+                turns: widget.isExpanded ? 0.25 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: Colors.grey[600],
+                ),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: widget.isEditing
-                    ? TextField(
-                        controller: _textController,
-                        focusNode: _focusNode,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 2,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 2,
-                            ),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                            borderSide: BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                        onSubmitted: _handleSubmitted,
-                        textInputAction: TextInputAction.done,
-                      )
-                    : Text(
-                        widget.node.name,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: widget.node.isLeaf ? Colors.grey[700] : Colors.black87,
-                          fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
+            )
+          else
+            const SizedBox(width: 20),
+          Icon(
+            widget.node.isLeaf ? Icons.insert_drive_file : Icons.folder,
+            size: 20,
+            color: widget.node.isLeaf
+                ? Colors.blueGrey
+                : Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: widget.isEditing
+                ? TextField(
+                    controller: _textController,
+                    focusNode: _focusNode,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
                         ),
                       ),
-              ),
-            ],
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(4),
+                        borderSide: BorderSide(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                      ),
+                    ),
+                    onSubmitted: _handleSubmitted,
+                    textInputAction: TextInputAction.done,
+                  )
+                : Text(
+                    widget.node.name,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: widget.node.isLeaf ? Colors.grey[700] : Colors.black87,
+                      fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tileContent = InkWell(
+      onTap: () {
+        // Apenas seleciona o item quando clicar nele (não expande/colapsa)
+        widget.onTap?.call();
+      },
+      child: _buildTileContent(),
+    );
+
+    // Se estiver em modo de edição, não permite drag
+    if (widget.isEditing) {
+      return tileContent;
+    }
+
+    // Permite drag apenas quando não está editando
+    return LongPressDraggable<String>(
+      data: widget.node.id,
+      delay: const Duration(milliseconds: 200),
+      onDragStarted: () {
+        widget.onDragStart?.call();
+      },
+      onDragEnd: (_) {
+        widget.onDragEnd?.call();
+      },
+      feedback: Material(
+        elevation: 6,
+        color: Colors.transparent,
+        child: Opacity(
+          opacity: 0.8,
+          child: Container(
+            width: 200,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(4),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: _buildTileContent(),
           ),
         ),
+      ),
+      childWhenDragging: Opacity(
+        opacity: 0.3,
+        child: tileContent,
+      ),
+      child: tileContent,
     );
   }
 }
