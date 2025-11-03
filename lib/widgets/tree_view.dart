@@ -331,6 +331,74 @@ class _TreeViewState extends State<TreeView> {
     }
   }
 
+  /// Navega para o próximo node não-leaf (Ctrl + seta para cima)
+  void _navigateToPreviousNonLeaf() {
+    // Não navega se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    final visibleNodes = _getVisibleNodes();
+    if (visibleNodes.isEmpty) return;
+    
+    int startIndex;
+    if (_selectedNodeId == null) {
+      startIndex = visibleNodes.length;
+    } else {
+      startIndex = _getNodeIndex(_selectedNodeId!);
+      if (startIndex == -1) {
+        startIndex = visibleNodes.length;
+      }
+    }
+    
+    // Procura para trás pelo próximo node não-leaf
+    for (int i = startIndex - 1; i >= 0; i--) {
+      if (!visibleNodes[i].isLeaf) {
+        _selectNode(visibleNodes[i].id);
+        return;
+      }
+    }
+    
+    // Se não encontrou, mantém seleção atual ou seleciona o primeiro se não havia seleção
+    if (_selectedNodeId == null && visibleNodes.isNotEmpty) {
+      _selectNode(visibleNodes.first.id);
+    }
+  }
+
+  /// Navega para o próximo node não-leaf (Ctrl + seta para baixo)
+  void _navigateToNextNonLeaf() {
+    // Não navega se estiver editando
+    if (_editingNodeId != null) {
+      return;
+    }
+    
+    final visibleNodes = _getVisibleNodes();
+    if (visibleNodes.isEmpty) return;
+    
+    int startIndex;
+    if (_selectedNodeId == null) {
+      startIndex = -1;
+    } else {
+      startIndex = _getNodeIndex(_selectedNodeId!);
+      if (startIndex == -1) {
+        startIndex = -1;
+      }
+    }
+    
+    // Procura para frente pelo próximo node não-leaf
+    for (int i = startIndex + 1; i < visibleNodes.length; i++) {
+      if (!visibleNodes[i].isLeaf) {
+        _selectNode(visibleNodes[i].id);
+        return;
+      }
+    }
+    
+    // Se não encontrou, mantém seleção atual ou seleciona o último se não havia seleção
+    if (_selectedNodeId == null && visibleNodes.isNotEmpty) {
+      _selectNode(visibleNodes.last.id);
+    }
+  }
+
   Map<LogicalKeySet, Intent> _getShortcuts() {
     final shortcuts = <LogicalKeySet, Intent>{
       LogicalKeySet(LogicalKeyboardKey.f2): const _F2Intent(),
@@ -338,6 +406,9 @@ class _TreeViewState extends State<TreeView> {
       LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmEditingIntent(),
       LogicalKeySet(LogicalKeyboardKey.arrowUp): const _ArrowUpIntent(),
       LogicalKeySet(LogicalKeyboardKey.arrowDown): const _ArrowDownIntent(),
+      // Ctrl + setas para navegar entre nodes não-leaf
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowUp): const _CtrlArrowUpIntent(),
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.arrowDown): const _CtrlArrowDownIntent(),
     };
     
     // Só adiciona shortcuts de esquerda/direita se não estiver editando
@@ -437,6 +508,20 @@ class _TreeViewState extends State<TreeView> {
                 return null;
               }
               _expandSelected();
+              return null;
+            },
+          ),
+          _CtrlArrowUpIntent: CallbackAction<_CtrlArrowUpIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] CTRL + SETA PARA CIMA pressionada');
+              _navigateToPreviousNonLeaf();
+              return null;
+            },
+          ),
+          _CtrlArrowDownIntent: CallbackAction<_CtrlArrowDownIntent>(
+            onInvoke: (_) {
+              print('⌨️ [TreeView] CTRL + SETA PARA BAIXO pressionada');
+              _navigateToNextNonLeaf();
               return null;
             },
           ),
@@ -541,5 +626,15 @@ class _ArrowLeftIntent extends Intent {
 // Intent para expandir (→)
 class _ArrowRightIntent extends Intent {
   const _ArrowRightIntent();
+}
+
+// Intent para navegar para o node não-leaf anterior (Ctrl + ↑)
+class _CtrlArrowUpIntent extends Intent {
+  const _CtrlArrowUpIntent();
+}
+
+// Intent para navegar para o próximo node não-leaf (Ctrl + ↓)
+class _CtrlArrowDownIntent extends Intent {
+  const _CtrlArrowDownIntent();
 }
 
