@@ -4,6 +4,7 @@ import 'models/node.dart';
 import 'services/node_service.dart';
 import 'widgets/tree_view.dart';
 import 'widgets/draggable_resizable_window.dart';
+import 'widgets/actions_panel.dart';
 
 void main() {
   runApp(const MyApp());
@@ -36,11 +37,51 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   late Node _rootNode;
   bool _showWindow = true;
+  bool _showActionsWindow = true;
+  String? _selectedNodeId;
+  bool _isEditing = false;
+  final Set<String> _expandedNodes = {}; // Rastreia nodes expandidos
 
   @override
   void initState() {
     super.initState();
     _rootNode = NodeService.createExampleStructure();
+  }
+
+  void _handleSelectionChanged(String? nodeId) {
+    setState(() {
+      _selectedNodeId = nodeId;
+    });
+  }
+
+  void _handleEditingStateChanged(bool isEditing, String? nodeId) {
+    setState(() {
+      _isEditing = isEditing;
+      // Se mudou a seleção durante edição, atualiza
+      if (nodeId != null) {
+        _selectedNodeId = nodeId;
+      }
+    });
+  }
+
+  void _handleExpansionChanged(String nodeId, bool isExpanded) {
+    setState(() {
+      if (isExpanded) {
+        _expandedNodes.add(nodeId);
+      } else {
+        _expandedNodes.remove(nodeId);
+      }
+    });
+  }
+
+  Node? _getSelectedNode() {
+    if (_selectedNodeId == null) return null;
+    return _rootNode.findById(_selectedNodeId!);
+  }
+
+  bool? _getSelectedNodeExpansionState() {
+    if (_selectedNodeId == null) return null;
+    return _expandedNodes.contains(_selectedNodeId);
   }
 
   void _updateRootNode(String nodeId, String newName) {
@@ -127,6 +168,28 @@ class _MyHomePageState extends State<MyHomePage> {
               child: TreeView(
                 rootNode: _rootNode,
                 onNodeNameChanged: _updateRootNode,
+                onSelectionChanged: _handleSelectionChanged,
+                onEditingStateChanged: _handleEditingStateChanged,
+                onExpansionChanged: _handleExpansionChanged,
+              ),
+            ),
+          // Janela flutuante com ActionsPanel (sempre visível)
+          if (_showActionsWindow)
+            DraggableResizableWindow(
+              title: 'Ações',
+              initialWidth: 350,
+              initialHeight: 500,
+              minWidth: 280,
+              minHeight: 300,
+              onClose: () {
+                setState(() {
+                  _showActionsWindow = false;
+                });
+              },
+              child: ActionsPanel(
+                selectedNode: _getSelectedNode(),
+                isEditing: _isEditing,
+                isExpanded: _getSelectedNodeExpansionState(),
               ),
             ),
         ],
