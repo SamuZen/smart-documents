@@ -28,12 +28,24 @@ class _DocumentEditorState extends State<DocumentEditor> {
   String _newFieldType = 'String';
   final TextEditingController _newFieldKeyController = TextEditingController();
   final TextEditingController _newFieldValueController = TextEditingController();
+  late final FocusNode _newFieldValueFocusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _newFieldValueFocusNode = FocusNode()..addListener(() {
+      if (mounted) {
+        setState(() {}); // Atualiza visual quando foco muda
+      }
+    });
+  }
 
   @override
   void dispose() {
     _disposeControllers();
     _newFieldKeyController.dispose();
     _newFieldValueController.dispose();
+    _newFieldValueFocusNode.dispose();
     super.dispose();
   }
 
@@ -140,11 +152,14 @@ class _DocumentEditorState extends State<DocumentEditor> {
         _fieldTypes[key] = _getValueType(value);
         _focusNodes[key] = FocusNode();
         
-        // Adiciona listener para salvar quando perder foco
+        // Adiciona listener para salvar quando perder foco e atualizar visual
         _focusNodes[key]!.addListener(() {
-          if (!_focusNodes[key]!.hasFocus) {
-            // Perdeu foco, confirma a edição
-            _confirmFieldEdit(key);
+          if (mounted) {
+            setState(() {}); // Atualiza visual quando foco muda
+            if (!_focusNodes[key]!.hasFocus) {
+              // Perdeu foco, confirma a edição
+              _confirmFieldEdit(key);
+            }
           }
         });
       }
@@ -393,17 +408,38 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      TextField(
-                        controller: controller,
-                        focusNode: focusNode,
-                        decoration: InputDecoration(
-                          labelText: 'Valor',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onSubmitted: (_) => _confirmFieldEdit(key),
-                        onEditingComplete: () => _confirmFieldEdit(key),
-                      ),
+                      // Se for bool, mostra checkbox; senão mostra TextField
+                      _fieldTypes[key] == 'bool'
+                          ? Row(
+                              children: [
+                                Checkbox(
+                                  value: value is bool ? value : false,
+                                  onChanged: (bool? newValue) {
+                                    if (newValue != null) {
+                                      widget.onFieldChanged(widget.selectedNode!.id, key, newValue);
+                                    }
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    value is bool && value ? 'Verdadeiro' : 'Falso',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[700],
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : _buildEditableTextField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              labelText: 'Valor',
+                              onSubmitted: (_) => _confirmFieldEdit(key),
+                              onEditingComplete: () => _confirmFieldEdit(key),
+                            ),
                     ],
                   ),
                 ),
@@ -454,21 +490,48 @@ class _DocumentEditorState extends State<DocumentEditor> {
             onChanged: (value) {
               setState(() {
                 _newFieldType = value ?? 'String';
+                // Limpa o valor quando muda o tipo
+                if (value == 'bool') {
+                  _newFieldValueController.text = 'false';
+                } else {
+                  _newFieldValueController.clear();
+                }
               });
             },
           ),
           const SizedBox(height: 12),
 
-          // Valor inicial
-          TextField(
-            controller: _newFieldValueController,
-            decoration: InputDecoration(
-              labelText: 'Valor inicial',
-              hintText: _getHintForType(_newFieldType),
-              border: const OutlineInputBorder(),
-              isDense: true,
-            ),
-          ),
+          // Valor inicial - se for bool, mostra checkbox; senão mostra TextField
+          _newFieldType == 'bool'
+              ? Row(
+                  children: [
+                    Checkbox(
+                      value: _newFieldValueController.text.toLowerCase() == 'true',
+                      onChanged: (bool? newValue) {
+                        setState(() {
+                          _newFieldValueController.text = newValue == true ? 'true' : 'false';
+                        });
+                      },
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _newFieldValueController.text.toLowerCase() == 'true' ? 'Verdadeiro' : 'Falso',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[700],
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : _buildEditableTextField(
+                  controller: _newFieldValueController,
+                  focusNode: _newFieldValueFocusNode,
+                  labelText: 'Valor inicial',
+                  hintText: _getHintForType(_newFieldType),
+                ),
           const SizedBox(height: 12),
 
           // Botão para adicionar
@@ -482,6 +545,62 @@ class _DocumentEditorState extends State<DocumentEditor> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Constrói um TextField com visual destacado quando em edição
+  Widget _buildEditableTextField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String labelText,
+    String? hintText,
+    VoidCallback? onEditingComplete,
+    ValueChanged<String>? onSubmitted,
+  }) {
+    return Builder(
+      builder: (context) {
+        final isEditing = focusNode.hasFocus;
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: labelText,
+            hintText: hintText,
+            border: OutlineInputBorder(
+              borderSide: BorderSide(
+                color: isEditing 
+                    ? Theme.of(context).colorScheme.primary 
+                    : Colors.grey,
+                width: isEditing ? 2 : 1,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderSide: BorderSide(
+                color: isEditing 
+                    ? Theme.of(context).colorScheme.primary 
+                    : Colors.grey,
+                width: isEditing ? 2 : 1,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderSide: BorderSide(
+                color: Theme.of(context).colorScheme.primary,
+                width: 2,
+              ),
+            ),
+            filled: isEditing,
+            fillColor: isEditing 
+                ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                : null,
+            isDense: true,
+          ),
+          style: TextStyle(
+            fontWeight: isEditing ? FontWeight.w500 : FontWeight.normal,
+          ),
+          onSubmitted: onSubmitted,
+          onEditingComplete: onEditingComplete,
+        );
+      },
     );
   }
 
