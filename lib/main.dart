@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:developer' as developer;
 import 'models/node.dart';
 import 'services/node_service.dart';
 import 'widgets/tree_view.dart';
@@ -43,13 +44,22 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _updateRootNode(String nodeId, String newName) {
+    developer.log('MyHomePage: _updateRootNode chamado. nodeId: $nodeId, newName: "$newName"');
+    final oldName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
+    developer.log('MyHomePage: Nome antigo do node: "$oldName"');
+    
     setState(() {
       _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
     });
+    
+    final updatedName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
+    developer.log('MyHomePage: Após atualização, nome do node: "$updatedName"');
   }
 
   Node _updateNodeInTree(Node node, String nodeId, String newName) {
+    developer.log('MyHomePage: _updateNodeInTree - node.id: ${node.id}, procurando: $nodeId');
     if (node.id == nodeId) {
+      developer.log('MyHomePage: Node encontrado! Atualizando nome de "${node.name}" para "$newName"');
       return node.copyWith(name: newName);
     }
     

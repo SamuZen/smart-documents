@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:developer' as developer;
 import '../models/node.dart';
 
 class TreeNodeTile extends StatefulWidget {
@@ -12,6 +13,7 @@ class TreeNodeTile extends StatefulWidget {
   final VoidCallback? onTap;
   final Function(String)? onNameChanged;
   final VoidCallback? onCancelEditing;
+  final Function(VoidCallback)? onConfirmEditing; // Recebe uma função que será chamada quando Enter for pressionado
 
   const TreeNodeTile({
     super.key,
@@ -25,6 +27,7 @@ class TreeNodeTile extends StatefulWidget {
     this.onTap,
     this.onNameChanged,
     this.onCancelEditing,
+    this.onConfirmEditing,
   });
 
   @override
@@ -35,24 +38,36 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
   late TextEditingController _textController;
   final FocusNode _focusNode = FocusNode();
 
+  
+  void confirmEditing() {
+    final trimmedValue = _textController.text.trim();
+    print('📝 [TreeNodeTile] confirmEditing() chamado - valor: "$trimmedValue"');
+    print('   onNameChanged existe: ${widget.onNameChanged != null}');
+    if (trimmedValue.isNotEmpty && widget.onNameChanged != null) {
+      print('✅ [TreeNodeTile] Salvando via confirmEditing: "$trimmedValue"');
+      widget.onNameChanged!(trimmedValue);
+    } else if (trimmedValue.isEmpty) {
+      print('❌ [TreeNodeTile] Valor vazio, cancelando');
+      widget.onCancelEditing?.call();
+    } else if (widget.onNameChanged == null) {
+      print('❌ [TreeNodeTile] onNameChanged é NULL! Não é possível salvar');
+    }
+  }
+  
   @override
   void initState() {
     super.initState();
     _textController = TextEditingController(text: widget.node.name);
-    _focusNode.addListener(_onFocusChanged);
   }
 
   @override
   void didUpdateWidget(TreeNodeTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // Atualiza o controller quando o nome do node muda
-    if (oldWidget.node.name != widget.node.name) {
-      _textController.text = widget.node.name;
-    }
-    
     // Quando entra em modo de edição, foca e seleciona o texto
     if (!oldWidget.isEditing && widget.isEditing) {
+      print('🔵 [TreeNodeTile] INICIANDO EDIÇÃO - Node: ${widget.node.id} | Nome: "${widget.node.name}"');
+      developer.log('TreeNodeTile: Entrando em modo de edição para node ${widget.node.id} (${widget.node.name})');
       _textController.text = widget.node.name;
       _focusNode.requestFocus();
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -60,29 +75,60 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
           baseOffset: 0,
           extentOffset: _textController.text.length,
         );
+        // Registra a função confirmEditing no TreeView para ser chamada quando Enter for pressionado
+        if (widget.onConfirmEditing != null) {
+          widget.onConfirmEditing!(confirmEditing);
+        }
       });
     }
     
     // Quando sai do modo de edição sem salvar, restaura o texto original
     if (oldWidget.isEditing && !widget.isEditing) {
+      print('🔴 [TreeNodeTile] CANCELANDO EDIÇÃO - Node: ${widget.node.id} | Nome final: "${widget.node.name}"');
+      developer.log('TreeNodeTile: Saindo do modo de edição para node ${widget.node.id} (nome final: ${widget.node.name})');
       _textController.text = widget.node.name;
       _focusNode.unfocus();
     }
-  }
-
-  void _onFocusChanged() {
-    // Se perder o foco durante edição e ainda está editando, cancela
-    if (!_focusNode.hasFocus && widget.isEditing) {
+    
+    // Atualiza o controller quando o nome do node muda (apenas quando não está editando)
+    if (oldWidget.node.name != widget.node.name && !widget.isEditing) {
+      developer.log('TreeNodeTile: Nome do node ${widget.node.id} mudou de "${oldWidget.node.name}" para "${widget.node.name}"');
       _textController.text = widget.node.name;
-      widget.onCancelEditing?.call();
     }
   }
 
+
   void _handleSubmitted(String value) {
     final trimmedValue = value.trim();
-    if (trimmedValue.isNotEmpty && trimmedValue != widget.node.name) {
-      widget.onNameChanged?.call(trimmedValue);
+    print('🟢 [TreeNodeTile] SUBMETENDO EDIÇÃO - Node: ${widget.node.id}');
+    print('   Valor digitado: "$value"');
+    print('   Valor trimmed: "$trimmedValue"');
+    print('   Nome atual: "${widget.node.name}"');
+    print('   trimmedValue.isEmpty: ${trimmedValue.isEmpty}');
+    print('   trimmedValue != widget.node.name: ${trimmedValue != widget.node.name}');
+    print('   onNameChanged existe: ${widget.onNameChanged != null}');
+    developer.log('TreeNodeTile: _handleSubmitted chamado para node ${widget.node.id}. Valor: "$value", Trimmed: "$trimmedValue", Nome atual: "${widget.node.name}", onNameChanged: ${widget.onNameChanged != null}');
+    
+    if (trimmedValue.isEmpty) {
+      print('❌ [TreeNodeTile] Valor vazio, cancelando edição');
+      developer.log('TreeNodeTile: Valor vazio, cancelando edição');
+      widget.onCancelEditing?.call();
+      return;
+    }
+    
+    if (trimmedValue == widget.node.name) {
+      print('⚠️ [TreeNodeTile] Valor igual ao nome atual, mas salvando mesmo assim');
+      developer.log('TreeNodeTile: Valor igual ao nome atual, mas salvando mesmo assim');
+    }
+    
+    // Sempre tenta salvar se o callback existe, mesmo que seja igual (pode ter mudanças de formatação)
+    if (widget.onNameChanged != null) {
+      print('✅ [TreeNodeTile] CHAMANDO onNameChanged com "$trimmedValue"');
+      developer.log('TreeNodeTile: Chamando onNameChanged com "$trimmedValue"');
+      widget.onNameChanged!(trimmedValue);
     } else {
+      print('❌ [TreeNodeTile] onNameChanged é NULL! Cancelando edição');
+      developer.log('TreeNodeTile: onNameChanged é NULL, cancelando edição');
       widget.onCancelEditing?.call();
     }
   }
