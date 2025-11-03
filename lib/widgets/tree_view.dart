@@ -7,11 +7,17 @@ import 'tree_node_tile.dart';
 class TreeView extends StatefulWidget {
   final Node rootNode;
   final Function(String nodeId, String newName)? onNodeNameChanged;
+  final Function(String? nodeId)? onSelectionChanged;
+  final Function(bool isEditing, String? nodeId)? onEditingStateChanged;
+  final Function(String nodeId, bool isExpanded)? onExpansionChanged;
 
   const TreeView({
     super.key,
     required this.rootNode,
     this.onNodeNameChanged,
+    this.onSelectionChanged,
+    this.onEditingStateChanged,
+    this.onExpansionChanged,
   });
 
   @override
@@ -49,6 +55,7 @@ class _TreeViewState extends State<TreeView> {
   }
 
   void _toggleExpand(String nodeId) {
+    final wasExpanded = _expandedNodes.contains(nodeId);
     setState(() {
       if (_expandedNodes.contains(nodeId)) {
         _expandedNodes.remove(nodeId);
@@ -56,6 +63,14 @@ class _TreeViewState extends State<TreeView> {
         _expandedNodes.add(nodeId);
       }
     });
+    // Notifica mudança de expansão
+    if (widget.onExpansionChanged != null) {
+      widget.onExpansionChanged!(nodeId, !wasExpanded);
+    }
+    // Notifica mudança de seleção para atualizar ações contextuais
+    if (nodeId == _selectedNodeId && widget.onSelectionChanged != null) {
+      widget.onSelectionChanged!(_selectedNodeId);
+    }
   }
 
   bool _isExpanded(String nodeId) {
@@ -82,6 +97,7 @@ class _TreeViewState extends State<TreeView> {
       });
     }
     
+    final previousEditingNodeId = _editingNodeId;
     setState(() {
       _selectedNodeId = nodeId;
       // Cancela modo de edição ao selecionar outro nó
@@ -89,14 +105,30 @@ class _TreeViewState extends State<TreeView> {
         _editingNodeId = null;
       }
     });
+    
+    // Notifica mudança de seleção
+    if (widget.onSelectionChanged != null) {
+      widget.onSelectionChanged!(nodeId);
+    }
+    
+    // Notifica mudança de estado de edição se necessário
+    if (previousEditingNodeId != _editingNodeId && widget.onEditingStateChanged != null) {
+      widget.onEditingStateChanged!(_editingNodeId != null, _editingNodeId);
+    }
+    
     print('   _selectedNodeId após setState: $_selectedNodeId');
     print('   _editingNodeId após setState: $_editingNodeId');
   }
 
   void _cancelEditing() {
+    final wasEditing = _editingNodeId != null;
     setState(() {
       _editingNodeId = null;
     });
+    // Notifica mudança de estado de edição
+    if (wasEditing && widget.onEditingStateChanged != null) {
+      widget.onEditingStateChanged!(false, _selectedNodeId);
+    }
   }
 
 
@@ -137,6 +169,11 @@ class _TreeViewState extends State<TreeView> {
       setState(() {
         _editingNodeId = null;
       });
+      
+      // Notifica mudança de estado de edição
+      if (widget.onEditingStateChanged != null) {
+        widget.onEditingStateChanged!(false, nodeId);
+      }
     } else {
       print('   Nenhum node em edição');
     }
@@ -161,6 +198,11 @@ class _TreeViewState extends State<TreeView> {
         _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
         _editingNodeId = null;
       });
+      
+      // Notifica mudança de estado de edição (saiu do modo de edição)
+      if (widget.onEditingStateChanged != null) {
+        widget.onEditingStateChanged!(false, nodeId);
+      }
       
       final updatedName = _rootNode.findById(nodeId)?.name ?? 'NÃO ENCONTRADO';
       print('   Nome após atualização local: "$updatedName"');
@@ -440,6 +482,10 @@ class _TreeViewState extends State<TreeView> {
                 setState(() {
                   _editingNodeId = _selectedNodeId;
                 });
+                // Notifica mudança de estado de edição
+                if (widget.onEditingStateChanged != null) {
+                  widget.onEditingStateChanged!(true, _selectedNodeId);
+                }
                 print('   _editingNodeId após setState: $_editingNodeId');
               } else {
                 print('❌ [TreeView] Nenhum node selecionado, não é possível entrar em modo de edição');
