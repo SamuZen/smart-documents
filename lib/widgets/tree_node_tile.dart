@@ -156,15 +156,6 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
       child: Row(
         children: [
           SizedBox(width: indent),
-          // Ícone de drag handle (visível apenas quando não está editando)
-          if (!widget.isEditing)
-            Icon(
-              Icons.drag_handle,
-              size: 16,
-              color: Colors.grey[400],
-            )
-          else
-            const SizedBox(width: 16),
           // Ícone de expandir/colapsar (se tiver filhos) - clicável separadamente
           if (widget.hasChildren)
             GestureDetector(

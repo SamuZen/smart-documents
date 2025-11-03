@@ -11,6 +11,7 @@ class TreeView extends StatefulWidget {
   final Function(bool isEditing, String? nodeId)? onEditingStateChanged;
   final Function(String nodeId, bool isExpanded)? onExpansionChanged;
   final Function(String draggedNodeId, String targetNodeId, bool insertBefore)? onNodeReordered;
+  final Function(String draggedNodeId, String newParentId)? onNodeParentChanged;
 
   const TreeView({
     super.key,
@@ -20,6 +21,7 @@ class TreeView extends StatefulWidget {
     this.onEditingStateChanged,
     this.onExpansionChanged,
     this.onNodeReordered,
+    this.onNodeParentChanged,
   });
 
   @override
@@ -253,6 +255,24 @@ class _TreeViewState extends State<TreeView> {
     developer.log('TreeView: Modo de edição cancelado');
   }
 
+  // Verifica se são irmãos (mesmo parent) - para determinar se é reordenação
+  bool _areSiblings(String draggedId, String targetId) {
+    final draggedParent = Node.findParent(_rootNode, draggedId);
+    final targetParent = Node.findParent(_rootNode, targetId);
+    
+    // Se ambos são filhos da raiz
+    if (draggedParent == null && targetParent == null) {
+      return true;
+    }
+    
+    // Se ambos têm o mesmo parent
+    if (draggedParent != null && targetParent != null) {
+      return draggedParent.id == targetParent.id;
+    }
+    
+    return false;
+  }
+
   void _handleDrop(String draggedNodeId, String targetNodeId) {
     print('🔄 [TreeView] DROP - draggedNodeId: $draggedNodeId, targetNodeId: $targetNodeId, insertBefore: $_insertBefore');
     developer.log('TreeView: _handleDrop chamado. draggedNodeId: $draggedNodeId, targetNodeId: $targetNodeId');
@@ -276,16 +296,31 @@ class _TreeViewState extends State<TreeView> {
     final draggedParent = Node.findParent(_rootNode, draggedNodeId);
     final targetParent = Node.findParent(_rootNode, targetNodeId);
 
-    // Verifica se são irmãos
-    if (draggedParent == null && targetParent == null) {
-      // Ambos são filhos da raiz
-      _reorderInRoot(draggedNodeId, targetNodeId, _insertBefore);
-    } else if (draggedParent != null && targetParent != null && draggedParent.id == targetParent.id) {
-      // Mesmos pais - reordena dentro do parent
-      _reorderInParent(draggedParent.id, draggedNodeId, targetNodeId, _insertBefore);
+    // Verifica se são irmãos (mesmo parent)
+    final areSibs = _areSiblings(draggedNodeId, targetNodeId);
+
+    if (areSibs) {
+      // Reordenação entre irmãos
+      if (draggedParent == null && targetParent == null) {
+        // Ambos são filhos da raiz
+        _reorderInRoot(draggedNodeId, targetNodeId, _insertBefore);
+      } else if (draggedParent != null && targetParent != null) {
+        // Mesmos pais - reordena dentro do parent
+        _reorderInParent(draggedParent.id, draggedNodeId, targetNodeId, _insertBefore);
+      }
+      
+      // Notifica callback de reordenação
+      if (widget.onNodeReordered != null) {
+        widget.onNodeReordered!(draggedNodeId, targetNodeId, _insertBefore);
+      }
     } else {
-      print('❌ Nodes não são irmãos, não é possível reordenar');
-      return;
+      // Mudança de parent - move o node para ser filho do target
+      _moveToNewParent(draggedNodeId, targetNodeId);
+      
+      // Notifica callback de mudança de parent
+      if (widget.onNodeParentChanged != null) {
+        widget.onNodeParentChanged!(draggedNodeId, targetNodeId);
+      }
     }
 
     // Limpa estado de drag
@@ -293,11 +328,58 @@ class _TreeViewState extends State<TreeView> {
       _draggedNodeId = null;
       _draggedOverNodeId = null;
     });
+  }
 
-    // Notifica callback
-    if (widget.onNodeReordered != null) {
-      widget.onNodeReordered!(draggedNodeId, targetNodeId, _insertBefore);
+  void _moveToNewParent(String draggedNodeId, String newParentId) {
+    print('📦 Movendo node $draggedNodeId para ser filho de $newParentId');
+    
+    // Primeiro, encontra o node a ser movido
+    final draggedNode = _rootNode.findById(draggedNodeId);
+    if (draggedNode == null) {
+      print('❌ Node não encontrado: $draggedNodeId');
+      return;
     }
+    
+    // Remove o node da posição atual (filtra recursivamente)
+    Node removeNodeRecursive(Node node) {
+      // Filtra os filhos removendo o node arrastado
+      final filteredChildren = node.children
+          .where((child) => child.id != draggedNodeId)
+          .map((child) => removeNodeRecursive(child))
+          .toList();
+      
+      return node.copyWith(children: filteredChildren);
+    }
+    
+    // Adiciona o node como filho do novo parent
+    Node addAsChildRecursive(Node node, Node nodeToAdd) {
+      if (node.id == newParentId) {
+        // Adiciona como último filho
+        final newChildren = List<Node>.from(node.children)..add(nodeToAdd);
+        return node.copyWith(children: newChildren);
+      }
+      
+      final updatedChildren = node.children
+          .map((child) => addAsChildRecursive(child, nodeToAdd))
+          .toList();
+      
+      return node.copyWith(children: updatedChildren);
+    }
+    
+    // Remove o node da árvore
+    var updatedRoot = removeNodeRecursive(_rootNode);
+    
+    // Adiciona o node como filho do novo parent
+    updatedRoot = addAsChildRecursive(updatedRoot, draggedNode);
+    
+    // Se o novo parent estava colapsado, expande para mostrar o novo filho
+    if (!_expandedNodes.contains(newParentId)) {
+      _toggleExpand(newParentId);
+    }
+    
+    setState(() {
+      _rootNode = updatedRoot;
+    });
   }
 
   void _reorderInRoot(String draggedNodeId, String targetNodeId, bool insertBefore) {
@@ -705,33 +787,24 @@ class _TreeViewState extends State<TreeView> {
     developer.log('TreeView: _buildTreeNodes - nodeId: $nodeId, isEditing: $isEditing, node.name: "${node.name}"');
     
     // Verifica se pode aceitar drop neste node
+    // Retorna true se pode fazer drop (seja reordenar irmãos ou mudar parent)
     bool canAcceptDrop(String draggedId) {
       if (draggedId == nodeId) return false; // Não pode soltar em si mesmo
       
       final draggedNode = _rootNode.findById(draggedId);
       if (draggedNode == null) return false;
       
-      // Verifica se o node target é descendente do node arrastado (não pode)
       final targetNode = _rootNode.findById(nodeId);
       if (targetNode == null) return false;
       
+      // Não pode mover para dentro de si mesmo ou seus descendentes
       if (Node.isDescendantOf(_rootNode, draggedId, nodeId)) return false;
       
-      // Verifica se são irmãos (mesmo parent)
-      final draggedParent = Node.findParent(_rootNode, draggedId);
-      final targetParent = Node.findParent(_rootNode, nodeId);
-      
-      // Se ambos têm o mesmo parent (ou ambos são filhos da raiz), pode aceitar
-      if (draggedParent == null && targetParent == null) {
-        return true; // Ambos são filhos da raiz
-      }
-      
-      if (draggedParent != null && targetParent != null) {
-        return draggedParent.id == targetParent.id; // Mesmos pais
-      }
-      
-      return false;
+      // Se passou todas as validações, pode aceitar
+      // (pode ser reordenação entre irmãos ou mudança de parent)
+      return true;
     }
+
 
     final isDraggedOver = _draggedOverNodeId == nodeId && 
                          _draggedNodeId != null && 
@@ -762,32 +835,44 @@ class _TreeViewState extends State<TreeView> {
         },
         builder: (context, candidateData, rejectedData) {
           final isActive = candidateData.isNotEmpty || rejectedData.isNotEmpty;
-          final isValid = candidateData.isNotEmpty && canAcceptDrop(_draggedNodeId ?? '');
+          final isValid = candidateData.isNotEmpty && (_draggedNodeId != null && canAcceptDrop(_draggedNodeId!));
           final isInvalid = rejectedData.isNotEmpty || 
                            (_draggedNodeId != null && !canAcceptDrop(_draggedNodeId!));
+          
+          // Determina se é reordenação (irmãos) ou mudança de parent
+          final bool isReorder = _draggedNodeId != null && 
+                                _areSiblings(_draggedNodeId!, nodeId);
+          final bool isParentChange = isValid && !isReorder;
           
           return Container(
             decoration: BoxDecoration(
               color: isActive && isValid
-                  ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
+                  ? (isParentChange 
+                      ? Theme.of(context).colorScheme.secondary.withOpacity(0.15) // Diferente para mudança de parent
+                      : Theme.of(context).colorScheme.primary.withOpacity(0.1)) // Normal para reordenação
                   : isActive && isInvalid
                       ? Colors.red.withOpacity(0.1)
                       : Colors.transparent,
               border: isDraggedOver && isValid
-                  ? Border(
-                      top: _insertBefore
-                          ? BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 2,
-                            )
-                          : BorderSide.none,
-                      bottom: !_insertBefore
-                          ? BorderSide(
-                              color: Theme.of(context).colorScheme.primary,
-                              width: 2,
-                            )
-                          : BorderSide.none,
-                    )
+                  ? isReorder
+                      ? Border(
+                          top: _insertBefore
+                              ? BorderSide(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 2,
+                                )
+                              : BorderSide.none,
+                          bottom: !_insertBefore
+                              ? BorderSide(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  width: 2,
+                                )
+                              : BorderSide.none,
+                        )
+                      : Border.all( // Para mudança de parent, mostra borda completa
+                          color: Theme.of(context).colorScheme.secondary,
+                          width: 2,
+                        )
                   : null,
             ),
             child: TreeNodeTile(

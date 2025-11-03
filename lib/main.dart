@@ -89,6 +89,52 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void _handleNodeParentChanged(String draggedNodeId, String newParentId) {
+    developer.log('MyHomePage: _handleNodeParentChanged chamado. draggedNodeId: $draggedNodeId, newParentId: $newParentId');
+    
+    // A TreeView já atualizou localmente, precisamos sincronizar com a raiz
+    setState(() {
+      _rootNode = _moveNodeToParent(_rootNode, draggedNodeId, newParentId);
+    });
+  }
+
+  Node _moveNodeToParent(Node root, String draggedNodeId, String newParentId) {
+    // Encontra o node a ser movido
+    final nodeToMove = root.findById(draggedNodeId);
+    if (nodeToMove == null) {
+      return root; // Node não encontrado, retorna sem alterações
+    }
+    
+    // Remove o node da árvore
+    Node removeNode(Node node) {
+      final updatedChildren = node.children
+          .where((child) => child.id != draggedNodeId)
+          .map((child) => removeNode(child))
+          .toList();
+      
+      return node.copyWith(children: updatedChildren);
+    }
+    
+    // Adiciona o node como filho do novo parent
+    Node addToParent(Node node, Node nodeToAdd) {
+      if (node.id == newParentId) {
+        final newChildren = List<Node>.from(node.children)..add(nodeToAdd);
+        return node.copyWith(children: newChildren);
+      }
+      
+      final updatedChildren = node.children
+          .map((child) => addToParent(child, nodeToAdd))
+          .toList();
+      
+      return node.copyWith(children: updatedChildren);
+    }
+    
+    var updatedRoot = removeNode(root);
+    updatedRoot = addToParent(updatedRoot, nodeToMove);
+    
+    return updatedRoot;
+  }
+
   Node _reorderNodeInTree(Node node, String draggedNodeId, String targetNodeId, bool insertBefore) {
     // Verifica se algum filho direto precisa ser reordenado
     final draggedIndex = node.children.indexWhere((child) => child.id == draggedNodeId);
@@ -210,6 +256,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 onEditingStateChanged: _handleEditingStateChanged,
                 onExpansionChanged: _handleExpansionChanged,
                 onNodeReordered: _handleNodeReordered,
+                onNodeParentChanged: _handleNodeParentChanged,
               ),
             ),
           // Janela flutuante com ActionsPanel (sempre visível)
