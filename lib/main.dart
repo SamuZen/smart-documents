@@ -33,13 +33,31 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  late final Node _rootNode;
+  late Node _rootNode;
   bool _showWindow = true;
 
   @override
   void initState() {
     super.initState();
     _rootNode = NodeService.createExampleStructure();
+  }
+
+  void _updateRootNode(String nodeId, String newName) {
+    setState(() {
+      _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
+    });
+  }
+
+  Node _updateNodeInTree(Node node, String nodeId, String newName) {
+    if (node.id == nodeId) {
+      return node.copyWith(name: newName);
+    }
+    
+    final updatedChildren = node.children.map((child) {
+      return _updateNodeInTree(child, nodeId, newName);
+    }).toList();
+    
+    return node.copyWith(children: updatedChildren);
   }
 
   @override
@@ -96,7 +114,10 @@ class _MyHomePageState extends State<MyHomePage> {
                   _showWindow = false;
                 });
               },
-              child: TreeView(rootNode: _rootNode),
+              child: TreeView(
+                rootNode: _rootNode,
+                onNodeNameChanged: _updateRootNode,
+              ),
             ),
         ],
       ),

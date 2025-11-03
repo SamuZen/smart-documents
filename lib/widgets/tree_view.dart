@@ -5,10 +5,12 @@ import 'tree_node_tile.dart';
 
 class TreeView extends StatefulWidget {
   final Node rootNode;
+  final Function(String nodeId, String newName)? onNodeNameChanged;
 
   const TreeView({
     super.key,
     required this.rootNode,
+    this.onNodeNameChanged,
   });
 
   @override
@@ -16,9 +18,24 @@ class TreeView extends StatefulWidget {
 }
 
 class _TreeViewState extends State<TreeView> {
+  late Node _rootNode;
   final Set<String> _expandedNodes = {};
   String? _selectedNodeId;
-  String? _editingNodeId; // ID do nó que está em modo de edição (mock)
+  String? _editingNodeId;
+
+  @override
+  void initState() {
+    super.initState();
+    _rootNode = widget.rootNode;
+  }
+
+  @override
+  void didUpdateWidget(TreeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.rootNode != widget.rootNode) {
+      _rootNode = widget.rootNode;
+    }
+  }
 
   void _toggleExpand(String nodeId) {
     setState(() {
@@ -50,8 +67,43 @@ class _TreeViewState extends State<TreeView> {
     });
   }
 
+  void _updateNodeName(String nodeId, String newName) {
+    setState(() {
+      _rootNode = _updateNodeInTree(_rootNode, nodeId, newName);
+    });
+    widget.onNodeNameChanged?.call(nodeId, newName);
+  }
+
+  Node _updateNodeInTree(Node node, String nodeId, String newName) {
+    if (node.id == nodeId) {
+      return node.copyWith(name: newName);
+    }
+    
+    final updatedChildren = node.children.map((child) {
+      return _updateNodeInTree(child, nodeId, newName);
+    }).toList();
+    
+    return node.copyWith(children: updatedChildren);
+  }
+
   void _confirmEditing() {
-    // Por enquanto apenas cancela (mock) - depois implementaremos salvar
+    // O salvamento é feito via onSubmitted do TextField quando o usuário pressiona Enter
+    // Este método pode ser usado para outras ações futuras
+    setState(() {
+      _editingNodeId = null;
+    });
+  }
+
+  void _handleNameChanged(String nodeId, String newName) {
+    if (newName.trim().isNotEmpty) {
+      _updateNodeName(nodeId, newName);
+      setState(() {
+        _editingNodeId = null;
+      });
+    }
+  }
+
+  void _handleCancelEditing() {
     setState(() {
       _editingNodeId = null;
     });
@@ -81,6 +133,7 @@ class _TreeViewState extends State<TreeView> {
           _CancelEditingIntent: CallbackAction<_CancelEditingIntent>(
             onInvoke: (_) {
               _cancelEditing();
+              _handleCancelEditing();
               return null;
             },
           ),
@@ -95,7 +148,7 @@ class _TreeViewState extends State<TreeView> {
           autofocus: true,
           child: ListView(
             padding: const EdgeInsets.all(8.0),
-            children: _buildTreeNodes(widget.rootNode, 0),
+            children: _buildTreeNodes(_rootNode, 0),
           ),
         ),
       ),
@@ -109,19 +162,27 @@ class _TreeViewState extends State<TreeView> {
     final nodeId = node.id;
 
     // Adiciona o próprio node
-      widgets.add(
-        TreeNodeTile(
-          key: ValueKey(nodeId),
-          node: node,
-          depth: depth,
-          isExpanded: isExpanded,
-          hasChildren: hasChildren,
-          isSelected: _selectedNodeId == nodeId,
-          isEditing: _editingNodeId == nodeId, // Passa informação se está editando (mock)
-          onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
-          onTap: () => _selectNode(nodeId),
-        ),
-      );
+    final isEditing = _editingNodeId == nodeId;
+    
+    widgets.add(
+      TreeNodeTile(
+        key: ValueKey(nodeId),
+        node: node,
+        depth: depth,
+        isExpanded: isExpanded,
+        hasChildren: hasChildren,
+        isSelected: _selectedNodeId == nodeId,
+        isEditing: isEditing,
+        onToggle: hasChildren ? () => _toggleExpand(nodeId) : null,
+        onTap: () => _selectNode(nodeId),
+        onNameChanged: isEditing
+            ? (newName) => _handleNameChanged(nodeId, newName)
+            : null,
+        onCancelEditing: isEditing
+            ? () => _handleCancelEditing()
+            : null,
+      ),
+    );
 
     // Adiciona recursivamente os filhos apenas se expandido
     if (hasChildren && isExpanded) {

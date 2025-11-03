@@ -7,9 +7,11 @@ class TreeNodeTile extends StatefulWidget {
   final bool isExpanded;
   final bool hasChildren;
   final bool isSelected;
-  final bool isEditing; // Mock: indica se está em modo de edição
+  final bool isEditing;
   final VoidCallback? onToggle;
   final VoidCallback? onTap;
+  final Function(String)? onNameChanged;
+  final VoidCallback? onCancelEditing;
 
   const TreeNodeTile({
     super.key,
@@ -21,6 +23,8 @@ class TreeNodeTile extends StatefulWidget {
     this.isEditing = false,
     this.onToggle,
     this.onTap,
+    this.onNameChanged,
+    this.onCancelEditing,
   });
 
   @override
@@ -28,6 +32,69 @@ class TreeNodeTile extends StatefulWidget {
 }
 
 class _TreeNodeTileState extends State<TreeNodeTile> {
+  late TextEditingController _textController;
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _textController = TextEditingController(text: widget.node.name);
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(TreeNodeTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Atualiza o controller quando o nome do node muda
+    if (oldWidget.node.name != widget.node.name) {
+      _textController.text = widget.node.name;
+    }
+    
+    // Quando entra em modo de edição, foca e seleciona o texto
+    if (!oldWidget.isEditing && widget.isEditing) {
+      _textController.text = widget.node.name;
+      _focusNode.requestFocus();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _textController.selection = TextSelection(
+          baseOffset: 0,
+          extentOffset: _textController.text.length,
+        );
+      });
+    }
+    
+    // Quando sai do modo de edição sem salvar, restaura o texto original
+    if (oldWidget.isEditing && !widget.isEditing) {
+      _textController.text = widget.node.name;
+      _focusNode.unfocus();
+    }
+  }
+
+  void _onFocusChanged() {
+    // Se perder o foco durante edição e ainda está editando, cancela
+    if (!_focusNode.hasFocus && widget.isEditing) {
+      _textController.text = widget.node.name;
+      widget.onCancelEditing?.call();
+    }
+  }
+
+  void _handleSubmitted(String value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isNotEmpty && trimmedValue != widget.node.name) {
+      widget.onNameChanged?.call(trimmedValue);
+    } else {
+      widget.onCancelEditing?.call();
+    }
+  }
+
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final indent = widget.depth * 24.0;
@@ -74,17 +141,51 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: Text(
-                  widget.node.name,
-                  style: TextStyle(
-                    fontSize: 16,
-                    // Mock: muda cor quando está editando
-                    color: widget.isEditing
-                        ? Colors.red // Cor diferente para indicar modo de edição (mock)
-                        : (widget.node.isLeaf ? Colors.grey[700] : Colors.black87),
-                    fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
-                  ),
-                ),
+                child: widget.isEditing
+                    ? TextField(
+                        controller: _textController,
+                        focusNode: _focusNode,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(4),
+                            borderSide: BorderSide(
+                              color: Theme.of(context).colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        onSubmitted: _handleSubmitted,
+                        textInputAction: TextInputAction.done,
+                      )
+                    : Text(
+                        widget.node.name,
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: widget.node.isLeaf ? Colors.grey[700] : Colors.black87,
+                          fontWeight: widget.isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
               ),
             ],
           ),
