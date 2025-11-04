@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
 import '../services/prompt_service.dart';
+import '../services/composer_state_service.dart';
 import 'prompt_composer_tree_view.dart';
 
 /// Janela Prompt Composer com seleção múltipla e formatação de texto para LLM
@@ -35,6 +36,50 @@ class _ComposerWindowState extends State<ComposerWindow> {
       rootNode: widget.rootNode,
       promptsRootNode: widget.promptsRootNode,
     );
+    _loadState();
+  }
+
+  /// Carrega o estado salvo do composer
+  Future<void> _loadState() async {
+    if (widget.projectPath == null) return;
+
+    try {
+      final state = await ComposerStateService.loadState(widget.projectPath!);
+      
+      setState(() {
+        // Restaura seleções de nodes
+        _promptService.setSelectedNodes(state.selectedNodeIds);
+        
+        // Restaura seleções de prompts
+        _selectedPromptIds.clear();
+        _selectedPromptIds.addAll(state.selectedPromptIds);
+        _promptService.setSelectedPrompts(_selectedPromptIds);
+        
+        // Restaura outras configurações
+        _includeChildren = state.includeChildren;
+        _selectedTab = state.selectedTab;
+      });
+    } catch (e) {
+      print('❌ Erro ao carregar estado do composer: $e');
+    }
+  }
+
+  /// Salva o estado atual do composer
+  Future<void> _saveState() async {
+    if (widget.projectPath == null) return;
+
+    try {
+      final state = ComposerState(
+        selectedNodeIds: _promptService.getSelectedNodeIds(),
+        selectedPromptIds: _selectedPromptIds,
+        includeChildren: _includeChildren,
+        selectedTab: _selectedTab,
+      );
+      
+      await ComposerStateService.saveState(widget.projectPath!, state);
+    } catch (e) {
+      print('❌ Erro ao salvar estado do composer: $e');
+    }
   }
 
   @override
@@ -42,11 +87,16 @@ class _ComposerWindowState extends State<ComposerWindow> {
     super.didUpdateWidget(oldWidget);
     // Atualiza o serviço quando rootNode ou promptsRootNode muda
     if (oldWidget.rootNode.id != widget.rootNode.id ||
-        oldWidget.promptsRootNode.id != widget.promptsRootNode.id) {
+        oldWidget.promptsRootNode.id != widget.promptsRootNode.id ||
+        oldWidget.projectPath != widget.projectPath) {
       _promptService = PromptService(
         rootNode: widget.rootNode,
         promptsRootNode: widget.promptsRootNode,
       );
+      // Recarrega o estado quando o projeto muda
+      if (oldWidget.projectPath != widget.projectPath) {
+        _loadState();
+      }
       setState(() {});
     }
   }
@@ -57,12 +107,14 @@ class _ComposerWindowState extends State<ComposerWindow> {
       _selectedPromptIds.addAll(selectedPromptIds);
       _promptService.setSelectedPrompts(_selectedPromptIds);
     });
+    _saveState(); // Salva estado após mudança
   }
 
   void _handleSelectionChanged(Set<String> selectedNodeIds) {
     setState(() {
       _promptService.setSelectedNodes(selectedNodeIds);
     });
+    _saveState(); // Salva estado após mudança
   }
 
   void _copyToClipboard() {
@@ -207,6 +259,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
                                     setState(() {
                                       _includeChildren = value ?? false;
                                     });
+                                    _saveState(); // Salva estado após mudança
                                   },
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -315,6 +368,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
         setState(() {
           _selectedTab = tabIndex;
         });
+        _saveState(); // Salva estado após mudança
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
@@ -397,6 +451,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
         Expanded(
           child: PromptComposerTreeView(
             rootNode: widget.rootNode,
+            initialSelection: _promptService.getSelectedNodeIds(),
             onSelectionChanged: _handleSelectionChanged,
           ),
         ),
@@ -451,6 +506,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
         Expanded(
           child: PromptComposerTreeView(
             rootNode: widget.promptsRootNode,
+            initialSelection: _selectedPromptIds,
             onSelectionChanged: _handlePromptSelectionChanged,
           ),
         ),

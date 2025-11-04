@@ -6,11 +6,13 @@ import 'prompt_composer_tree_node_tile.dart';
 class PromptComposerTreeView extends StatefulWidget {
   final Node rootNode;
   final Function(Set<String> selectedNodeIds)? onSelectionChanged;
+  final Set<String>? initialSelection; // Seleções iniciais para restaurar estado
 
   const PromptComposerTreeView({
     super.key,
     required this.rootNode,
     this.onSelectionChanged,
+    this.initialSelection,
   });
 
   @override
@@ -26,6 +28,11 @@ class _PromptComposerTreeViewState extends State<PromptComposerTreeView> {
     super.initState();
     // Expande todos os nodes ao inicializar
     _expandAllNodes();
+    
+    // Restaura seleções iniciais se fornecidas
+    if (widget.initialSelection != null) {
+      _selectedNodeIds.addAll(widget.initialSelection!);
+    }
   }
 
   /// Expande todos os nodes recursivamente
@@ -49,6 +56,13 @@ class _PromptComposerTreeViewState extends State<PromptComposerTreeView> {
     if (oldWidget.rootNode.id != widget.rootNode.id ||
         oldWidget.rootNode.name != widget.rootNode.name) {
       _expandAllNodes();
+    }
+    // Atualiza seleções quando initialSelection muda
+    if (widget.initialSelection != null &&
+        widget.initialSelection != oldWidget.initialSelection) {
+      _selectedNodeIds.clear();
+      _selectedNodeIds.addAll(widget.initialSelection!);
+      setState(() {});
     }
   }
 
