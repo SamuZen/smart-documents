@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
 import 'confirmation_dialog.dart';
@@ -9,6 +12,11 @@ class _TabIndentIntent extends Intent {
   const _TabIndentIntent();
 }
 
+/// Intent para cancelar edição de key
+class _CancelKeyEditIntent extends Intent {
+  const _CancelKeyEditIntent();
+}
+
 /// Widget para editar campos personalizados de um node (inspector-style)
 class DocumentEditor extends StatefulWidget {
   final Node? selectedNode;
@@ -16,6 +24,7 @@ class DocumentEditor extends StatefulWidget {
   final Function(String nodeId, String fieldKey) onFieldRemoved;
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldAdded;
   final FocusNode? mainAppFocusNode;
+  final String? projectPath; // Caminho do projeto para salvar imagens
 
   const DocumentEditor({
     super.key,
@@ -24,6 +33,7 @@ class DocumentEditor extends StatefulWidget {
     required this.onFieldRemoved,
     required this.onFieldAdded,
     this.mainAppFocusNode,
+    this.projectPath,
   });
 
   @override
@@ -41,6 +51,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
   late final FocusNode _newFieldKeyFocusNode;
   late final FocusNode _newFieldValueFocusNode;
   bool _showAddField = false;
+  bool _isDraggingFiles = false;
+  String? _editingFieldKey; // Key do campo sendo editado
+  final TextEditingController _editingKeyController = TextEditingController();
 
   // Chave especial para armazenar metadados de tipos de campos
   static const String _fieldTypesKey = '__fieldTypes__';
@@ -194,13 +207,15 @@ class _DocumentEditorState extends State<DocumentEditor> {
           }
         }
       } else {
-        _controllers[key] = TextEditingController(text: _valueToString(value));
         // IMPORTANTE: Carrega o tipo dos metadados persistidos primeiro
         // Se não existe em metadados, usa o tipo detectado
         if (!_fieldTypes.containsKey(key)) {
           _fieldTypes[key] = _getValueType(value);
         }
         final savedType = _fieldTypes[key]!;
+        // Para campos de imagem, o valor é sempre o caminho da imagem (String)
+        final controllerValue = savedType == 'image' && value is String ? value : _valueToString(value);
+        _controllers[key] = TextEditingController(text: controllerValue);
         _focusNodes[key] = FocusNode();
         
         // IMPORTANTE: Se for tipo "text", SEMPRE cria descriptionController, independente do tamanho
@@ -246,6 +261,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return Icons.toggle_on;
       case 'text':
         return Icons.article;
+      case 'image':
+        return Icons.image;
       case 'String':
       default:
         return Icons.text_fields;
@@ -260,6 +277,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return AppTheme.neonCyan;
       case 'text':
         return AppTheme.neonCyan;
+      case 'image':
+        return AppTheme.neonBlue;
       case 'String':
       default:
         return AppTheme.textSecondary;
@@ -309,7 +328,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
       return;
     }
 
-    final value = _parseValue(valueStr, type);
+    final value = type == 'image' 
+        ? _newFieldValueController.text.trim() // Para imagem, usa o caminho diretamente
+        : _parseValue(valueStr, type);
     widget.onFieldAdded(widget.selectedNode!.id, key, value);
     
     // IMPORTANTE: Salva o tipo do campo em _fieldTypes ANTES de atualizar controllers
@@ -698,9 +719,36 @@ class _DocumentEditorState extends State<DocumentEditor> {
     final node = widget.selectedNode!;
     final fields = node.fields;
 
-    return Container(
-      color: AppTheme.surfaceDark,
-      child: Column(
+    return DropTarget(
+      onDragDone: (detail) async {
+        await _handleFileDrop(detail.files);
+      },
+      onDragEntered: (detail) {
+        setState(() {
+          _isDraggingFiles = true;
+        });
+      },
+      onDragExited: (detail) {
+        setState(() {
+          _isDraggingFiles = false;
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: _isDraggingFiles 
+              ? AppTheme.neonBlue.withOpacity(0.1)
+              : AppTheme.surfaceDark,
+          border: _isDraggingFiles
+              ? Border.all(
+                  color: AppTheme.neonBlue.withOpacity(0.5),
+                  width: 2,
+                )
+              : null,
+          borderRadius: _isDraggingFiles
+              ? BorderRadius.circular(4)
+              : null,
+        ),
+        child: Column(
         children: [
           // Header compacto
           Container(
@@ -833,6 +881,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       final isText = finalType == 'text'; // SEMPRE mostra botão se tipo for "text"
                       final isLongString = hasDescriptionController || isText;
                       final isBool = finalType == 'bool';
+                      final isImage = finalType == 'image';
                       
                       // Debug para verificar se o tipo está correto
                       if (isText) {
@@ -849,6 +898,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         isText: isText,
                         isLongString: isLongString,
                         isBool: isBool,
+                        isImage: isImage,
                       );
                     }),
                   
@@ -923,6 +973,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                       DropdownMenuItem(value: 'text', child: Text('text')),
                                       DropdownMenuItem(value: 'number', child: Text('number')),
                                       DropdownMenuItem(value: 'bool', child: Text('bool')),
+                                      DropdownMenuItem(value: 'image', child: Text('image')),
                                     ],
                                   onChanged: (value) {
                                     setState(() {
@@ -1035,31 +1086,62 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                               ),
                                             ],
                                           )
-                                        : _buildCompactTextField(
-                                            controller: _newFieldValueController,
-                                            focusNode: _newFieldValueFocusNode,
-                                            label: 'Valor',
-                                            hintText: _getHintForType(_newFieldType),
-                                            fieldType: _newFieldType,
-                                          ),
+                                        : _newFieldType == 'image'
+                                            ? _buildImagePickerField(
+                                                key: 'new_field',
+                                                value: _newFieldValueController.text,
+                                                onImageSelected: (path) {
+                                                  _newFieldValueController.text = path;
+                                                },
+                                              )
+                                            : _buildCompactTextField(
+                                                controller: _newFieldValueController,
+                                                focusNode: _newFieldValueFocusNode,
+                                                label: 'Valor',
+                                                hintText: _getHintForType(_newFieldType),
+                                                fieldType: _newFieldType,
+                                              ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 8),
                           
-                          // Botão adicionar
-                          SizedBox(
-                            width: double.infinity,
-                            child: TextButton.icon(
-                              onPressed: _addNewField,
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Adicionar'),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 6),
-                                backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
-                                foregroundColor: AppTheme.neonBlue,
+                          // Botões adicionar e cancelar
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: _addNewField,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Adicionar'),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
+                                    foregroundColor: AppTheme.neonBlue,
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _showAddField = false;
+                                      _newFieldKeyController.clear();
+                                      _newFieldValueController.clear();
+                                      _newFieldType = 'String';
+                                    });
+                                  },
+                                  icon: const Icon(Icons.close, size: 16),
+                                  label: const Text('Cancelar'),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    backgroundColor: AppTheme.surfaceVariantDark,
+                                    foregroundColor: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1069,6 +1151,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1085,6 +1168,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
     required bool isText,
     required bool isLongString,
     required bool isBool,
+    required bool isImage,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1096,17 +1180,80 @@ class _DocumentEditorState extends State<DocumentEditor> {
       child: Row(
         crossAxisAlignment: isLongString ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          // Label à esquerda
+          // Label à esquerda (editável)
           SizedBox(
             width: 100,
-            child: Text(
-              key,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            child: _editingFieldKey == key
+                ? Shortcuts(
+                    shortcuts: {
+                      LogicalKeySet(LogicalKeyboardKey.escape): const _CancelKeyEditIntent(),
+                    },
+                    child: Actions(
+                      actions: {
+                        _CancelKeyEditIntent: CallbackAction<_CancelKeyEditIntent>(
+                          onInvoke: (_) {
+                            setState(() {
+                              _editingFieldKey = null;
+                              _editingKeyController.clear();
+                            });
+                            return null;
+                          },
+                        ),
+                      },
+                      child: TextField(
+                        controller: _editingKeyController,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                          ),
+                        ),
+                        onSubmitted: (newKey) {
+                          _confirmKeyEdit(key, newKey);
+                        },
+                        autofocus: true,
+                      ),
+                    ),
+                  )
+                : InkWell(
+                    onTap: () {
+                      setState(() {
+                        _editingFieldKey = key;
+                        _editingKeyController.text = key;
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            key,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.edit,
+                          size: 12,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ],
+                    ),
+                  ),
           ),
           
           const SizedBox(width: 8),
@@ -1144,7 +1291,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                     ],
                   )
-                : Row(
+                : isImage
+                    ? _buildImageField(key, value, controller)
+                    : Row(
                     children: [
                       // Ícone do tipo
                       Icon(
@@ -1354,12 +1503,372 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return 'true ou false';
       case 'text':
         return 'Texto longo (múltiplas linhas)';
+      case 'image':
+        return 'Caminho da imagem';
       case 'String':
       default:
         return 'Ex: Meu texto';
     }
   }
 
+  /// Widget para selecionar e exibir imagem
+  Widget _buildImageField(String key, dynamic value, TextEditingController controller) {
+    final imagePath = value is String ? value : '';
+    // Resolve o caminho: se for relativo, usa o caminho do projeto; se for absoluto, usa diretamente
+    final resolvedPath = _resolveImagePath(imagePath);
+    final hasImage = imagePath.isNotEmpty && resolvedPath != null && File(resolvedPath).existsSync();
+    
+    return Row(
+      children: [
+        // Ícone do tipo
+        Icon(
+          _getIconForType('image'),
+          size: 14,
+          color: _getIconColorForType('image'),
+        ),
+        const SizedBox(width: 6),
+        
+        // Preview da imagem ou botão de seleção
+        Expanded(
+          child: hasImage
+              ? Row(
+                  children: [
+                    // Preview da imagem com hover para ampliar
+                    _ImageHoverPreviewWidget(
+                      imagePath: resolvedPath,
+                      previewSize: 60,
+                      hoverSize: 600,
+                    ),
+                    const SizedBox(width: 8),
+                    // Caminho da imagem
+                    Expanded(
+                      child: Text(
+                        imagePath,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Botão para trocar imagem
+                    IconButton(
+                      icon: Icon(Icons.edit, size: 16, color: AppTheme.neonBlue),
+                      onPressed: () => _pickImage(key),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      tooltip: 'Trocar imagem',
+                    ),
+                  ],
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _pickImage(key),
+                  icon: Icon(Icons.image, size: 16, color: AppTheme.neonBlue),
+                  label: const Text('Selecionar Imagem'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    side: BorderSide(color: AppTheme.borderNeutral),
+                    foregroundColor: AppTheme.textPrimary,
+                  ),
+                ),
+        ),
+        
+        // Botão remover
+        IconButton(
+          icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+          onPressed: () => _removeField(key),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          tooltip: 'Remover',
+        ),
+      ],
+    );
+  }
+
+  /// Widget para selecionar imagem ao criar novo campo
+  Widget _buildImagePickerField({
+    required String key,
+    required String value,
+    required Function(String) onImageSelected,
+  }) {
+    final resolvedPath = _resolveImagePath(value);
+    final hasImage = value.isNotEmpty && resolvedPath != null && File(resolvedPath).existsSync();
+    
+    return Row(
+      children: [
+        Expanded(
+          child: hasImage
+              ? Row(
+                  children: [
+                    _ImageHoverPreviewWidget(
+                      imagePath: resolvedPath,
+                      previewSize: 50,
+                      hoverSize: 600,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.edit, size: 16, color: AppTheme.neonBlue),
+                      onPressed: () => _pickImageForNewField(onImageSelected),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      tooltip: 'Trocar imagem',
+                    ),
+                  ],
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _pickImageForNewField(onImageSelected),
+                  icon: Icon(Icons.image, size: 16, color: AppTheme.neonBlue),
+                  label: const Text('Selecionar Imagem'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    side: BorderSide(color: AppTheme.borderNeutral),
+                    foregroundColor: AppTheme.textPrimary,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// Seleciona uma imagem para um campo existente
+  Future<void> _pickImage(String key) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final sourcePath = result.files.single.path!;
+        
+        // Copia a imagem para assets/images/ dentro do projeto
+        final copiedPath = await _copyImageToProject(sourcePath);
+        
+        if (copiedPath != null) {
+          // Atualiza o campo com o caminho relativo
+          widget.onFieldChanged(widget.selectedNode!.id, key, copiedPath);
+          
+          // Atualiza o controller
+          if (_controllers.containsKey(key)) {
+            _controllers[key]!.text = copiedPath;
+          }
+          
+          setState(() {});
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao copiar imagem para o projeto')),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erro ao selecionar imagem: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao selecionar imagem: $e')),
+      );
+    }
+  }
+
+  /// Seleciona uma imagem para um novo campo
+  Future<void> _pickImageForNewField(Function(String) onImageSelected) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final sourcePath = result.files.single.path!;
+        
+        // Copia a imagem para assets/images/ dentro do projeto
+        final copiedPath = await _copyImageToProject(sourcePath);
+        
+        if (copiedPath != null) {
+          onImageSelected(copiedPath);
+          setState(() {});
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao copiar imagem para o projeto')),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erro ao selecionar imagem: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao selecionar imagem: $e')),
+      );
+    }
+  }
+
+  /// Resolve o caminho da imagem (relativo ou absoluto)
+  String? _resolveImagePath(String imagePath) {
+    if (imagePath.isEmpty) return null;
+    
+    // Se já é um caminho absoluto e existe, retorna diretamente
+    if (File(imagePath).existsSync()) {
+      return imagePath;
+    }
+    
+    // Se é um caminho relativo (começa com assets/), resolve usando o caminho do projeto
+    if (imagePath.startsWith('assets${Platform.pathSeparator}') && widget.projectPath != null) {
+      final fullPath = '${widget.projectPath}${Platform.pathSeparator}$imagePath';
+      if (File(fullPath).existsSync()) {
+        return fullPath;
+      }
+    }
+    
+    return null;
+  }
+
+  /// Copia uma imagem para a pasta assets/images/ do projeto
+  /// Retorna o caminho relativo da imagem copiada ou null em caso de erro
+  Future<String?> _copyImageToProject(String sourceImagePath) async {
+    if (widget.projectPath == null) {
+      print('⚠️ [DocumentEditor] Nenhum projeto aberto, não é possível copiar imagem');
+      return null;
+    }
+
+    try {
+      final sourceFile = File(sourceImagePath);
+      if (!sourceFile.existsSync()) {
+        print('❌ [DocumentEditor] Arquivo de origem não existe: $sourceImagePath');
+        return null;
+      }
+
+      // Cria a estrutura de pastas assets/images/ dentro do projeto
+      final assetsDir = Directory('${widget.projectPath}${Platform.pathSeparator}assets');
+      final imagesDir = Directory('${assetsDir.path}${Platform.pathSeparator}images');
+      
+      if (!imagesDir.existsSync()) {
+        await imagesDir.create(recursive: true);
+        print('✅ [DocumentEditor] Pasta criada: ${imagesDir.path}');
+      }
+
+      // Obtém o nome do arquivo original
+      final fileName = sourceFile.uri.pathSegments.last;
+      
+      // Gera um nome único para evitar conflitos (adiciona timestamp)
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final lastDotIndex = fileName.lastIndexOf('.');
+      final nameWithoutExt = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+      final extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : '';
+      final uniqueFileName = '${nameWithoutExt}_$timestamp$extension';
+      
+      // Caminho de destino
+      final destinationPath = '${imagesDir.path}${Platform.pathSeparator}$uniqueFileName';
+
+      // Copia o arquivo
+      await sourceFile.copy(destinationPath);
+      print('✅ [DocumentEditor] Imagem copiada: $destinationPath');
+
+      // Retorna o caminho relativo (assets/images/nome_arquivo)
+      return 'assets${Platform.pathSeparator}images${Platform.pathSeparator}$uniqueFileName';
+    } catch (e) {
+      print('❌ [DocumentEditor] Erro ao copiar imagem: $e');
+      return null;
+    }
+  }
+
+
+  /// Confirma a edição do key de um campo
+  void _confirmKeyEdit(String oldKey, String newKey) {
+    if (widget.selectedNode == null) return;
+
+    final trimmedNewKey = newKey.trim();
+    
+    // Validações
+    if (trimmedNewKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('O nome do campo não pode estar vazio')),
+      );
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
+
+    if (trimmedNewKey == oldKey) {
+      // Não houve mudança, apenas cancela
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
+
+    // Verifica se já existe um campo com esse nome
+    if (widget.selectedNode!.fields.containsKey(trimmedNewKey)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Já existe um campo com este nome')),
+      );
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
+
+    // Renomeia o campo
+    final fields = Map<String, dynamic>.from(widget.selectedNode!.fields);
+    final value = fields[oldKey];
+    final fieldType = _fieldTypes[oldKey];
+
+    // Remove o campo antigo
+    fields.remove(oldKey);
+    if (_fieldTypes.containsKey(oldKey)) {
+      _fieldTypes.remove(oldKey);
+    }
+
+    // Adiciona com o novo nome
+    fields[trimmedNewKey] = value;
+    if (fieldType != null) {
+      _fieldTypes[trimmedNewKey] = fieldType;
+    }
+
+    // Atualiza o node - primeiro remove o antigo, depois adiciona com o novo nome
+    widget.onFieldRemoved(widget.selectedNode!.id, oldKey); // Remove o campo antigo
+    widget.onFieldAdded(widget.selectedNode!.id, trimmedNewKey, value); // Adiciona com novo nome
+
+    // Atualiza os controllers
+    if (_controllers.containsKey(oldKey)) {
+      _controllers[trimmedNewKey] = _controllers.remove(oldKey)!;
+    }
+    if (_focusNodes.containsKey(oldKey)) {
+      _focusNodes[trimmedNewKey] = _focusNodes.remove(oldKey)!;
+    }
+    if (_descriptionControllers.containsKey(oldKey)) {
+      _descriptionControllers[trimmedNewKey] = _descriptionControllers.remove(oldKey)!;
+    }
+
+    // Salva o tipo do campo se existir
+    if (fieldType != null) {
+      _saveFieldType(trimmedNewKey, fieldType);
+    }
+
+    setState(() {
+      _editingFieldKey = null;
+      _editingKeyController.clear();
+    });
+
+    // Atualiza os controllers
+    _updateControllers();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Campo renomeado de "$oldKey" para "$trimmedNewKey"')),
+    );
+  }
 
   /// Input formatter que substitui vírgulas por pontos em números
   TextInputFormatter _getNumberFormatter() {
@@ -1388,5 +1897,244 @@ class _DocumentEditorState extends State<DocumentEditor> {
       }
       return newValue;
     });
+  }
+
+  /// Processa arquivos arrastados e soltos no editor
+  Future<void> _handleFileDrop(List<dynamic> files) async {
+    if (widget.selectedNode == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione um node para adicionar imagens')),
+      );
+      return;
+    }
+
+    if (files.isEmpty) return;
+
+    setState(() {
+      _isDraggingFiles = false;
+    });
+
+    // Processa apenas imagens
+    final imageFiles = files.where((file) {
+      final path = file.path?.toString() ?? '';
+      if (path.isEmpty) return false;
+      final extension = path.toLowerCase().split('.').last;
+      return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].contains(extension);
+    }).toList();
+
+    if (imageFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apenas arquivos de imagem são suportados')),
+      );
+      return;
+    }
+
+    // Processa cada imagem
+    for (final file in imageFiles) {
+      try {
+        final filePath = file.path?.toString() ?? '';
+        if (filePath.isEmpty) continue;
+        
+        // Copia a imagem para o projeto
+        final copiedPath = await _copyImageToProject(filePath);
+        
+        if (copiedPath != null) {
+          // Gera um nome de campo único baseado no timestamp
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final fieldKey = 'image_$timestamp';
+          
+          // Verifica se o campo já existe (improvável, mas por segurança)
+          int counter = 1;
+          String finalFieldKey = fieldKey;
+          while (widget.selectedNode!.fields.containsKey(finalFieldKey)) {
+            finalFieldKey = '${fieldKey}_$counter';
+            counter++;
+          }
+          
+          // Adiciona o campo ao node
+          widget.onFieldAdded(widget.selectedNode!.id, finalFieldKey, copiedPath);
+          
+          // Salva o tipo do campo
+          _fieldTypes[finalFieldKey] = 'image';
+          _saveFieldType(finalFieldKey, 'image');
+          
+          // Atualiza os controllers
+          _updateControllers();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao copiar imagem: ${file.name}')),
+          );
+        }
+      } catch (e) {
+        print('❌ [DocumentEditor] Erro ao processar arquivo ${file.name}: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao processar ${file.name}: $e')),
+        );
+      }
+    }
+
+    // Mostra mensagem de sucesso
+    if (imageFiles.length == 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Imagem adicionada com sucesso')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${imageFiles.length} imagens adicionadas com sucesso')),
+      );
+    }
+  }
+}
+
+/// Widget que mostra preview da imagem com ampliação no hover
+class _ImageHoverPreviewWidget extends StatefulWidget {
+  final String imagePath;
+  final double previewSize;
+  final double hoverSize;
+
+  const _ImageHoverPreviewWidget({
+    required this.imagePath,
+    required this.previewSize,
+    required this.hoverSize,
+  });
+
+  @override
+  State<_ImageHoverPreviewWidget> createState() => _ImageHoverPreviewWidgetState();
+}
+
+class _ImageHoverPreviewWidgetState extends State<_ImageHoverPreviewWidget> {
+  bool _isHovering = false;
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  void _removeOverlay() {
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    }
+  }
+
+
+  void _showHoverImage(BuildContext context) {
+    _removeOverlay();
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) {
+        // Obtém o tamanho da tela para centralizar
+        final mediaQuery = MediaQuery.of(context);
+        final screenSize = mediaQuery.size;
+        
+        // Calcula a posição centralizada
+        final left = (screenSize.width - widget.hoverSize) / 2;
+        final top = (screenSize.height - widget.hoverSize) / 2;
+        
+        return Positioned(
+          left: left,
+          top: top,
+          child: IgnorePointer(
+            ignoring: true, // Ignora eventos de mouse para não interferir com outros componentes
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: widget.hoverSize,
+                height: widget.hoverSize,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceElevated,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.neonBlue.withOpacity(0.5),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(widget.imagePath),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: AppTheme.surfaceVariantDark,
+                      child: Icon(
+                        Icons.broken_image,
+                        size: 64,
+                        color: AppTheme.textTertiary,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      },
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (event) {
+        setState(() {
+          _isHovering = true;
+        });
+        _showHoverImage(context);
+      },
+      onExit: (event) {
+        setState(() {
+          _isHovering = false;
+        });
+        // Remove o overlay após um pequeno delay para permitir transição suave
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && !_isHovering) {
+            _removeOverlay();
+          }
+        });
+      },
+      child: Container(
+        width: widget.previewSize,
+        height: widget.previewSize,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: _isHovering 
+                ? AppTheme.neonBlue.withOpacity(0.6)
+                : AppTheme.borderNeutral,
+            width: _isHovering ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Image.file(
+            File(widget.imagePath),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: AppTheme.surfaceVariantDark,
+                child: Icon(
+                  Icons.broken_image,
+                  size: widget.previewSize * 0.4,
+                  color: AppTheme.textTertiary,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }

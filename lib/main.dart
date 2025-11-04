@@ -1488,6 +1488,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             onFieldRemoved: _handleFieldRemoved,
                             onFieldAdded: _handleFieldAdded,
                             mainAppFocusNode: _mainFocusNode,
+                            projectPath: _currentProjectPath,
                           ),
                         ),
                     ],
