@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
 import 'confirmation_dialog.dart';
@@ -16,6 +18,7 @@ class DocumentEditor extends StatefulWidget {
   final Function(String nodeId, String fieldKey) onFieldRemoved;
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldAdded;
   final FocusNode? mainAppFocusNode;
+  final String? projectPath; // Caminho do projeto para salvar imagens
 
   const DocumentEditor({
     super.key,
@@ -24,6 +27,7 @@ class DocumentEditor extends StatefulWidget {
     required this.onFieldRemoved,
     required this.onFieldAdded,
     this.mainAppFocusNode,
+    this.projectPath,
   });
 
   @override
@@ -194,13 +198,15 @@ class _DocumentEditorState extends State<DocumentEditor> {
           }
         }
       } else {
-        _controllers[key] = TextEditingController(text: _valueToString(value));
         // IMPORTANTE: Carrega o tipo dos metadados persistidos primeiro
         // Se não existe em metadados, usa o tipo detectado
         if (!_fieldTypes.containsKey(key)) {
           _fieldTypes[key] = _getValueType(value);
         }
         final savedType = _fieldTypes[key]!;
+        // Para campos de imagem, o valor é sempre o caminho da imagem (String)
+        final controllerValue = savedType == 'image' && value is String ? value : _valueToString(value);
+        _controllers[key] = TextEditingController(text: controllerValue);
         _focusNodes[key] = FocusNode();
         
         // IMPORTANTE: Se for tipo "text", SEMPRE cria descriptionController, independente do tamanho
@@ -246,6 +252,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return Icons.toggle_on;
       case 'text':
         return Icons.article;
+      case 'image':
+        return Icons.image;
       case 'String':
       default:
         return Icons.text_fields;
@@ -260,6 +268,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return AppTheme.neonCyan;
       case 'text':
         return AppTheme.neonCyan;
+      case 'image':
+        return AppTheme.neonBlue;
       case 'String':
       default:
         return AppTheme.textSecondary;
@@ -309,7 +319,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
       return;
     }
 
-    final value = _parseValue(valueStr, type);
+    final value = type == 'image' 
+        ? _newFieldValueController.text.trim() // Para imagem, usa o caminho diretamente
+        : _parseValue(valueStr, type);
     widget.onFieldAdded(widget.selectedNode!.id, key, value);
     
     // IMPORTANTE: Salva o tipo do campo em _fieldTypes ANTES de atualizar controllers
@@ -833,6 +845,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       final isText = finalType == 'text'; // SEMPRE mostra botão se tipo for "text"
                       final isLongString = hasDescriptionController || isText;
                       final isBool = finalType == 'bool';
+                      final isImage = finalType == 'image';
                       
                       // Debug para verificar se o tipo está correto
                       if (isText) {
@@ -849,6 +862,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         isText: isText,
                         isLongString: isLongString,
                         isBool: isBool,
+                        isImage: isImage,
                       );
                     }),
                   
@@ -923,6 +937,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                       DropdownMenuItem(value: 'text', child: Text('text')),
                                       DropdownMenuItem(value: 'number', child: Text('number')),
                                       DropdownMenuItem(value: 'bool', child: Text('bool')),
+                                      DropdownMenuItem(value: 'image', child: Text('image')),
                                     ],
                                   onChanged: (value) {
                                     setState(() {
@@ -1035,13 +1050,21 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                               ),
                                             ],
                                           )
-                                        : _buildCompactTextField(
-                                            controller: _newFieldValueController,
-                                            focusNode: _newFieldValueFocusNode,
-                                            label: 'Valor',
-                                            hintText: _getHintForType(_newFieldType),
-                                            fieldType: _newFieldType,
-                                          ),
+                                        : _newFieldType == 'image'
+                                            ? _buildImagePickerField(
+                                                key: 'new_field',
+                                                value: _newFieldValueController.text,
+                                                onImageSelected: (path) {
+                                                  _newFieldValueController.text = path;
+                                                },
+                                              )
+                                            : _buildCompactTextField(
+                                                controller: _newFieldValueController,
+                                                focusNode: _newFieldValueFocusNode,
+                                                label: 'Valor',
+                                                hintText: _getHintForType(_newFieldType),
+                                                fieldType: _newFieldType,
+                                              ),
                               ),
                             ],
                           ),
@@ -1085,6 +1108,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
     required bool isText,
     required bool isLongString,
     required bool isBool,
+    required bool isImage,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1144,7 +1168,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                     ],
                   )
-                : Row(
+                : isImage
+                    ? _buildImageField(key, value, controller)
+                    : Row(
                     children: [
                       // Ícone do tipo
                       Icon(
@@ -1354,9 +1380,320 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return 'true ou false';
       case 'text':
         return 'Texto longo (múltiplas linhas)';
+      case 'image':
+        return 'Caminho da imagem';
       case 'String':
       default:
         return 'Ex: Meu texto';
+    }
+  }
+
+  /// Widget para selecionar e exibir imagem
+  Widget _buildImageField(String key, dynamic value, TextEditingController controller) {
+    final imagePath = value is String ? value : '';
+    // Resolve o caminho: se for relativo, usa o caminho do projeto; se for absoluto, usa diretamente
+    final resolvedPath = _resolveImagePath(imagePath);
+    final hasImage = imagePath.isNotEmpty && resolvedPath != null && File(resolvedPath).existsSync();
+    
+    return Row(
+      children: [
+        // Ícone do tipo
+        Icon(
+          _getIconForType('image'),
+          size: 14,
+          color: _getIconColorForType('image'),
+        ),
+        const SizedBox(width: 6),
+        
+        // Preview da imagem ou botão de seleção
+        Expanded(
+          child: hasImage
+              ? Row(
+                  children: [
+                    // Preview da imagem
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.borderNeutral),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Image.file(
+                          File(resolvedPath),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: AppTheme.surfaceVariantDark,
+                              child: Icon(
+                                Icons.broken_image,
+                                size: 24,
+                                color: AppTheme.textTertiary,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Caminho da imagem
+                    Expanded(
+                      child: Text(
+                        imagePath,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Botão para trocar imagem
+                    IconButton(
+                      icon: Icon(Icons.edit, size: 16, color: AppTheme.neonBlue),
+                      onPressed: () => _pickImage(key),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      tooltip: 'Trocar imagem',
+                    ),
+                  ],
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _pickImage(key),
+                  icon: Icon(Icons.image, size: 16, color: AppTheme.neonBlue),
+                  label: const Text('Selecionar Imagem'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    side: BorderSide(color: AppTheme.borderNeutral),
+                    foregroundColor: AppTheme.textPrimary,
+                  ),
+                ),
+        ),
+        
+        // Botão remover
+        IconButton(
+          icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+          onPressed: () => _removeField(key),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          tooltip: 'Remover',
+        ),
+      ],
+    );
+  }
+
+  /// Widget para selecionar imagem ao criar novo campo
+  Widget _buildImagePickerField({
+    required String key,
+    required String value,
+    required Function(String) onImageSelected,
+  }) {
+    final resolvedPath = _resolveImagePath(value);
+    final hasImage = value.isNotEmpty && resolvedPath != null && File(resolvedPath).existsSync();
+    
+    return Row(
+      children: [
+        Expanded(
+          child: hasImage
+              ? Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.borderNeutral),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: Image.file(
+                          File(resolvedPath),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: AppTheme.surfaceVariantDark,
+                              child: Icon(
+                                Icons.broken_image,
+                                size: 20,
+                                color: AppTheme.textTertiary,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        value,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.edit, size: 16, color: AppTheme.neonBlue),
+                      onPressed: () => _pickImageForNewField(onImageSelected),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                      tooltip: 'Trocar imagem',
+                    ),
+                  ],
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _pickImageForNewField(onImageSelected),
+                  icon: Icon(Icons.image, size: 16, color: AppTheme.neonBlue),
+                  label: const Text('Selecionar Imagem'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    side: BorderSide(color: AppTheme.borderNeutral),
+                    foregroundColor: AppTheme.textPrimary,
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  /// Seleciona uma imagem para um campo existente
+  Future<void> _pickImage(String key) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final sourcePath = result.files.single.path!;
+        
+        // Copia a imagem para assets/images/ dentro do projeto
+        final copiedPath = await _copyImageToProject(sourcePath);
+        
+        if (copiedPath != null) {
+          // Atualiza o campo com o caminho relativo
+          widget.onFieldChanged(widget.selectedNode!.id, key, copiedPath);
+          
+          // Atualiza o controller
+          if (_controllers.containsKey(key)) {
+            _controllers[key]!.text = copiedPath;
+          }
+          
+          setState(() {});
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao copiar imagem para o projeto')),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erro ao selecionar imagem: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao selecionar imagem: $e')),
+      );
+    }
+  }
+
+  /// Seleciona uma imagem para um novo campo
+  Future<void> _pickImageForNewField(Function(String) onImageSelected) async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final sourcePath = result.files.single.path!;
+        
+        // Copia a imagem para assets/images/ dentro do projeto
+        final copiedPath = await _copyImageToProject(sourcePath);
+        
+        if (copiedPath != null) {
+          onImageSelected(copiedPath);
+          setState(() {});
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erro ao copiar imagem para o projeto')),
+          );
+        }
+      }
+    } catch (e) {
+      print('❌ Erro ao selecionar imagem: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao selecionar imagem: $e')),
+      );
+    }
+  }
+
+  /// Resolve o caminho da imagem (relativo ou absoluto)
+  String? _resolveImagePath(String imagePath) {
+    if (imagePath.isEmpty) return null;
+    
+    // Se já é um caminho absoluto e existe, retorna diretamente
+    if (File(imagePath).existsSync()) {
+      return imagePath;
+    }
+    
+    // Se é um caminho relativo (começa com assets/), resolve usando o caminho do projeto
+    if (imagePath.startsWith('assets${Platform.pathSeparator}') && widget.projectPath != null) {
+      final fullPath = '${widget.projectPath}${Platform.pathSeparator}$imagePath';
+      if (File(fullPath).existsSync()) {
+        return fullPath;
+      }
+    }
+    
+    return null;
+  }
+
+  /// Copia uma imagem para a pasta assets/images/ do projeto
+  /// Retorna o caminho relativo da imagem copiada ou null em caso de erro
+  Future<String?> _copyImageToProject(String sourceImagePath) async {
+    if (widget.projectPath == null) {
+      print('⚠️ [DocumentEditor] Nenhum projeto aberto, não é possível copiar imagem');
+      return null;
+    }
+
+    try {
+      final sourceFile = File(sourceImagePath);
+      if (!sourceFile.existsSync()) {
+        print('❌ [DocumentEditor] Arquivo de origem não existe: $sourceImagePath');
+        return null;
+      }
+
+      // Cria a estrutura de pastas assets/images/ dentro do projeto
+      final assetsDir = Directory('${widget.projectPath}${Platform.pathSeparator}assets');
+      final imagesDir = Directory('${assetsDir.path}${Platform.pathSeparator}images');
+      
+      if (!imagesDir.existsSync()) {
+        await imagesDir.create(recursive: true);
+        print('✅ [DocumentEditor] Pasta criada: ${imagesDir.path}');
+      }
+
+      // Obtém o nome do arquivo original
+      final fileName = sourceFile.uri.pathSegments.last;
+      
+      // Gera um nome único para evitar conflitos (adiciona timestamp)
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final lastDotIndex = fileName.lastIndexOf('.');
+      final nameWithoutExt = lastDotIndex > 0 ? fileName.substring(0, lastDotIndex) : fileName;
+      final extension = lastDotIndex > 0 ? fileName.substring(lastDotIndex) : '';
+      final uniqueFileName = '${nameWithoutExt}_$timestamp$extension';
+      
+      // Caminho de destino
+      final destinationPath = '${imagesDir.path}${Platform.pathSeparator}$uniqueFileName';
+
+      // Copia o arquivo
+      await sourceFile.copy(destinationPath);
+      print('✅ [DocumentEditor] Imagem copiada: $destinationPath');
+
+      // Retorna o caminho relativo (assets/images/nome_arquivo)
+      return 'assets${Platform.pathSeparator}images${Platform.pathSeparator}$uniqueFileName';
+    } catch (e) {
+      print('❌ [DocumentEditor] Erro ao copiar imagem: $e');
+      return null;
     }
   }
 
