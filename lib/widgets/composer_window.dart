@@ -87,9 +87,6 @@ class _ComposerWindowState extends State<ComposerWindow> {
   }
 
   String _getFormattedPrompt() {
-    if (!_promptService.hasSelection()) {
-      return '// Selecione pelo menos um node para gerar o prompt';
-    }
     return _promptService.generatePrompt(
       includeChildren: _includeChildren,
     );
@@ -226,11 +223,9 @@ class _ComposerWindowState extends State<ComposerWindow> {
                               ],
                             ),
                             const SizedBox(width: 16),
-                            // Botão copiar
+                            // Botão copiar (sempre habilitado, permite copiar prompts mesmo sem nodes)
                             OutlinedButton.icon(
-                              onPressed: _promptService.hasSelection()
-                                  ? _copyToClipboard
-                                  : null,
+                              onPressed: _copyToClipboard,
                               icon: const Icon(Icons.copy, size: 16),
                               label: const Text('Copiar'),
                               style: OutlinedButton.styleFrom(
@@ -297,7 +292,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
                         const Spacer(),
                         if (!_promptService.hasSelection())
                           Text(
-                            'Selecione nodes para gerar o prompt',
+                            'Nenhum node selecionado (apenas prompts)',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppTheme.textTertiary,

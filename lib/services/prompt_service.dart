@@ -120,17 +120,20 @@ class PromptService {
 
       buffer.write(introText);
       buffer.write(jsonContent);
-    } else {
-      // Se não há nodes selecionados, apenas retorna '[]'
-      buffer.write('[]');
     }
+    // Se não há nodes selecionados, não adiciona nada (contexto vazio)
+    // Isso permite que os prompts sejam montados mesmo sem nodes selecionados
 
     // 3. Prompts com order = "after"
     if (promptManager != null) {
       final afterPrompts = promptManager!.getPromptsByOrder(PromptOrder.after);
       if (afterPrompts.isNotEmpty) {
-        buffer.writeln();
-        buffer.writeln();
+        // Adiciona linha em branco apenas se houver conteúdo antes (nodes ou prompts start)
+        if (selectedNodes.isNotEmpty || 
+            (promptManager!.getPromptsByOrder(PromptOrder.start).isNotEmpty)) {
+          buffer.writeln();
+          buffer.writeln();
+        }
       }
       for (final prompt in afterPrompts) {
         buffer.writeln(prompt.prompt);
@@ -141,8 +144,13 @@ class PromptService {
     // 4. Prompts com order = "end"
     if (promptManager != null) {
       final endPrompts = promptManager!.getPromptsByOrder(PromptOrder.end);
-      if (endPrompts.isNotEmpty && selectedNodes.isNotEmpty) {
-        buffer.writeln();
+      if (endPrompts.isNotEmpty) {
+        // Adiciona linha em branco apenas se houver conteúdo antes
+        if (selectedNodes.isNotEmpty || 
+            (promptManager!.getPromptsByOrder(PromptOrder.start).isNotEmpty) ||
+            (promptManager!.getPromptsByOrder(PromptOrder.after).isNotEmpty)) {
+          buffer.writeln();
+        }
       }
       for (final prompt in endPrompts) {
         buffer.writeln(prompt.prompt);
