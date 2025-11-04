@@ -2,6 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
+import 'confirmation_dialog.dart';
+
+/// Intent para Tab com indentação
+class _TabIndentIntent extends Intent {
+  const _TabIndentIntent();
+}
 
 /// Widget para editar campos personalizados de um node (inspector-style)
 class DocumentEditor extends StatefulWidget {
@@ -354,6 +360,26 @@ class _DocumentEditorState extends State<DocumentEditor> {
     _descriptionControllers.remove(key);
   }
 
+  /// Pergunta se quer cancelar a criação do campo
+  Future<void> _askToCancelFieldCreation() async {
+    await ConfirmationDialog.show(
+      context: context,
+      title: 'Cancelar criação de campo?',
+      message: 'Deseja cancelar a criação deste campo?',
+      confirmText: 'Sim, cancelar',
+      cancelText: 'Continuar editando',
+      isDestructive: false,
+      onConfirm: () {
+        setState(() {
+          _showAddField = false;
+          _newFieldKeyController.clear();
+          _newFieldValueController.clear();
+          _newFieldType = 'String';
+        });
+      },
+    );
+  }
+
   /// Abre um dialog para editar texto longo em um campo maior
   Future<void> _openTextEditorDialog(String key, TextEditingController controller) async {
     final editedText = await showDialog<String>(
@@ -397,33 +423,66 @@ class _DocumentEditorState extends State<DocumentEditor> {
                 
                 // Campo de texto grande
                 Expanded(
-                  child: TextField(
-                    controller: textController,
-                    autofocus: true,
-                    maxLines: null,
-                    expands: true,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textPrimary,
-                      height: 1.5,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Digite o texto...',
-                      contentPadding: const EdgeInsets.all(16),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.borderNeutral),
+                  child: Shortcuts(
+                    shortcuts: {
+                      LogicalKeySet(LogicalKeyboardKey.tab): const _TabIndentIntent(),
+                    },
+                    child: Actions(
+                      actions: {
+                        _TabIndentIntent: CallbackAction<_TabIndentIntent>(
+                          onInvoke: (_) {
+                            final text = textController.text;
+                            final selection = textController.selection;
+                            
+                            if (selection.isValid) {
+                              final start = selection.start;
+                              final end = selection.end;
+                              
+                              final indent = '  ';
+                              final textBefore = text.substring(0, start);
+                              final textAfter = text.substring(end);
+                              
+                              final newText = textBefore + indent + textAfter;
+                              final newCursorPosition = start + indent.length;
+                              
+                              textController.value = TextEditingValue(
+                                text: newText,
+                                selection: TextSelection.collapsed(offset: newCursorPosition),
+                              );
+                            }
+                            return null;
+                          },
+                        ),
+                      },
+                      child: TextField(
+                        controller: textController,
+                        autofocus: true,
+                        maxLines: null,
+                        expands: true,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textPrimary,
+                          height: 1.5,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Digite o texto...',
+                          contentPadding: const EdgeInsets.all(16),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.borderNeutral),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.borderNeutral),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
+                          ),
+                          filled: true,
+                          fillColor: AppTheme.surfaceVariantDark,
+                        ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.borderNeutral),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
-                      ),
-                      filled: true,
-                      fillColor: AppTheme.surfaceVariantDark,
                     ),
                   ),
                 ),
@@ -509,33 +568,66 @@ class _DocumentEditorState extends State<DocumentEditor> {
                 
                 // Campo de texto grande
                 Expanded(
-                  child: TextField(
-                    controller: textController,
-                    autofocus: true,
-                    maxLines: null,
-                    expands: true,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textPrimary,
-                      height: 1.5,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Digite o texto...',
-                      contentPadding: const EdgeInsets.all(16),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.borderNeutral),
+                  child: Shortcuts(
+                    shortcuts: {
+                      LogicalKeySet(LogicalKeyboardKey.tab): const _TabIndentIntent(),
+                    },
+                    child: Actions(
+                      actions: {
+                        _TabIndentIntent: CallbackAction<_TabIndentIntent>(
+                          onInvoke: (_) {
+                            final text = textController.text;
+                            final selection = textController.selection;
+                            
+                            if (selection.isValid) {
+                              final start = selection.start;
+                              final end = selection.end;
+                              
+                              final indent = '  ';
+                              final textBefore = text.substring(0, start);
+                              final textAfter = text.substring(end);
+                              
+                              final newText = textBefore + indent + textAfter;
+                              final newCursorPosition = start + indent.length;
+                              
+                              textController.value = TextEditingValue(
+                                text: newText,
+                                selection: TextSelection.collapsed(offset: newCursorPosition),
+                              );
+                            }
+                            return null;
+                          },
+                        ),
+                      },
+                      child: TextField(
+                        controller: textController,
+                        autofocus: true,
+                        maxLines: null,
+                        expands: true,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppTheme.textPrimary,
+                          height: 1.5,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Digite o texto...',
+                          contentPadding: const EdgeInsets.all(16),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.borderNeutral),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.borderNeutral),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
+                          ),
+                          filled: true,
+                          fillColor: AppTheme.surfaceVariantDark,
+                        ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.borderNeutral),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
-                      ),
-                      filled: true,
-                      fillColor: AppTheme.surfaceVariantDark,
                     ),
                   ),
                 ),
@@ -785,12 +877,26 @@ class _DocumentEditorState extends State<DocumentEditor> {
                           const SizedBox(height: 8),
                           
                           // Nome do campo
-                          _buildCompactTextField(
-                            controller: _newFieldKeyController,
-                            focusNode: _newFieldKeyFocusNode,
-                            label: 'Nome',
-                            hintText: 'Ex: description, cost',
-                            icon: Icons.label_outline,
+                          Focus(
+                            onKeyEvent: (node, event) {
+                              // Intercepta Backspace/Delete quando o campo está vazio
+                              if (event is KeyDownEvent && 
+                                  _newFieldKeyController.text.isEmpty &&
+                                  (event.logicalKey == LogicalKeyboardKey.backspace ||
+                                   event.logicalKey == LogicalKeyboardKey.delete)) {
+                                // Pergunta se quer cancelar a criação do campo
+                                _askToCancelFieldCreation();
+                                return KeyEventResult.handled;
+                              }
+                              return KeyEventResult.ignored;
+                            },
+                            child: _buildCompactTextField(
+                              controller: _newFieldKeyController,
+                              focusNode: _newFieldKeyFocusNode,
+                              label: 'Nome',
+                              hintText: 'Ex: description, cost',
+                              icon: Icons.label_outline,
+                            ),
                           ),
                           const SizedBox(height: 6),
                           
@@ -857,29 +963,62 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                         ? Row(
                                             children: [
                                               Expanded(
-                                                child: TextField(
-                                                  controller: _newFieldValueController,
-                                                  focusNode: _newFieldValueFocusNode,
-                                                  maxLines: null,
-                                                  minLines: 4,
-                                                  style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                                                  decoration: InputDecoration(
-                                                    hintText: 'Digite o texto longo...',
-                                                    isDense: true,
-                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                                    border: OutlineInputBorder(
-                                                      borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                child: Shortcuts(
+                                                  shortcuts: {
+                                                    LogicalKeySet(LogicalKeyboardKey.tab): const _TabIndentIntent(),
+                                                  },
+                                                  child: Actions(
+                                                    actions: {
+                                                      _TabIndentIntent: CallbackAction<_TabIndentIntent>(
+                                                        onInvoke: (_) {
+                                                          final text = _newFieldValueController.text;
+                                                          final selection = _newFieldValueController.selection;
+                                                          
+                                                          if (selection.isValid) {
+                                                            final start = selection.start;
+                                                            final end = selection.end;
+                                                            
+                                                            final indent = '  ';
+                                                            final textBefore = text.substring(0, start);
+                                                            final textAfter = text.substring(end);
+                                                            
+                                                            final newText = textBefore + indent + textAfter;
+                                                            final newCursorPosition = start + indent.length;
+                                                            
+                                                            _newFieldValueController.value = TextEditingValue(
+                                                              text: newText,
+                                                              selection: TextSelection.collapsed(offset: newCursorPosition),
+                                                            );
+                                                          }
+                                                          return null;
+                                                        },
+                                                      ),
+                                                    },
+                                                    child: TextField(
+                                                      controller: _newFieldValueController,
+                                                      focusNode: _newFieldValueFocusNode,
+                                                      maxLines: null,
+                                                      minLines: 4,
+                                                      style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                                                      decoration: InputDecoration(
+                                                        hintText: 'Digite o texto longo...',
+                                                        isDense: true,
+                                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                        border: OutlineInputBorder(
+                                                          borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                        ),
+                                                        enabledBorder: OutlineInputBorder(
+                                                          borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                        ),
+                                                        focusedBorder: OutlineInputBorder(
+                                                          borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                                        ),
+                                                        filled: true,
+                                                        fillColor: _newFieldValueFocusNode.hasFocus
+                                                            ? AppTheme.neonBlue.withOpacity(0.1)
+                                                            : AppTheme.surfaceVariantDark,
+                                                      ),
                                                     ),
-                                                    enabledBorder: OutlineInputBorder(
-                                                      borderSide: BorderSide(color: AppTheme.borderNeutral),
-                                                    ),
-                                                    focusedBorder: OutlineInputBorder(
-                                                      borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
-                                                    ),
-                                                    filled: true,
-                                                    fillColor: _newFieldValueFocusNode.hasFocus
-                                                        ? AppTheme.neonBlue.withOpacity(0.1)
-                                                        : AppTheme.surfaceVariantDark,
                                                   ),
                                                 ),
                                               ),
@@ -1021,34 +1160,96 @@ class _DocumentEditorState extends State<DocumentEditor> {
                             ? Row(
                                 children: [
                                   Expanded(
-                                    child: TextField(
-                                      controller: controller,
-                                      focusNode: focusNode,
-                                      maxLines: isText ? null : 3, // text pode expandir infinitamente
-                                      minLines: isText ? 4 : 2,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: AppTheme.textPrimary,
-                                      ),
-                                      decoration: InputDecoration(
-                                        hintText: 'Digite o texto...',
-                                        isDense: true,
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                        border: OutlineInputBorder(
-                                          borderSide: BorderSide(color: AppTheme.borderNeutral),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(color: AppTheme.borderNeutral),
-                                        ),
-                                        focusedBorder: OutlineInputBorder(
-                                          borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
-                                        ),
-                                        filled: true,
-                                        fillColor: focusNode.hasFocus
-                                            ? AppTheme.neonBlue.withOpacity(0.1)
-                                            : AppTheme.surfaceVariantDark,
-                                      ),
-                                    ),
+                                    child: isText
+                                        ? Shortcuts(
+                                            shortcuts: {
+                                              LogicalKeySet(LogicalKeyboardKey.tab): const _TabIndentIntent(),
+                                            },
+                                            child: Actions(
+                                              actions: {
+                                                _TabIndentIntent: CallbackAction<_TabIndentIntent>(
+                                                  onInvoke: (_) {
+                                                    final text = controller.text;
+                                                    final selection = controller.selection;
+                                                    
+                                                    if (selection.isValid) {
+                                                      final start = selection.start;
+                                                      final end = selection.end;
+                                                      
+                                                      final indent = '  ';
+                                                      final textBefore = text.substring(0, start);
+                                                      final textAfter = text.substring(end);
+                                                      
+                                                      final newText = textBefore + indent + textAfter;
+                                                      final newCursorPosition = start + indent.length;
+                                                      
+                                                      controller.value = TextEditingValue(
+                                                        text: newText,
+                                                        selection: TextSelection.collapsed(offset: newCursorPosition),
+                                                      );
+                                                    }
+                                                    return null;
+                                                  },
+                                                ),
+                                              },
+                                              child: TextField(
+                                                controller: controller,
+                                                focusNode: focusNode,
+                                                maxLines: null,
+                                                minLines: 4,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: AppTheme.textPrimary,
+                                                ),
+                                                decoration: InputDecoration(
+                                                  hintText: 'Digite o texto...',
+                                                  isDense: true,
+                                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                                  border: OutlineInputBorder(
+                                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                  ),
+                                                  enabledBorder: OutlineInputBorder(
+                                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                  ),
+                                                  focusedBorder: OutlineInputBorder(
+                                                    borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                                  ),
+                                                  filled: true,
+                                                  fillColor: focusNode.hasFocus
+                                                      ? AppTheme.neonBlue.withOpacity(0.1)
+                                                      : AppTheme.surfaceVariantDark,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                        : TextField(
+                                            controller: controller,
+                                            focusNode: focusNode,
+                                            maxLines: 3,
+                                            minLines: 2,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: AppTheme.textPrimary,
+                                            ),
+                                            decoration: InputDecoration(
+                                              hintText: 'Digite o texto...',
+                                              isDense: true,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                              border: OutlineInputBorder(
+                                                borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                              ),
+                                              filled: true,
+                                              fillColor: focusNode.hasFocus
+                                                  ? AppTheme.neonBlue.withOpacity(0.1)
+                                                  : AppTheme.surfaceVariantDark,
+                                            ),
+                                          ),
                                   ),
                                   // Botão para abrir popup de edição maior (SEMPRE para tipo "text")
                                   // Aparece sempre que o tipo for "text", independente do tamanho
@@ -1158,6 +1359,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return 'Ex: Meu texto';
     }
   }
+
 
   /// Input formatter que substitui vírgulas por pontos em números
   TextInputFormatter _getNumberFormatter() {

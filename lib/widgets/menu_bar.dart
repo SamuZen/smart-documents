@@ -7,6 +7,7 @@ class AppMenuBar extends StatelessWidget {
   final VoidCallback? onOpenProject;
   final VoidCallback? onSaveProject;
   final VoidCallback? onCloseProject;
+  final VoidCallback? onOpenProjectLocation;
   final VoidCallback? onUndo;
   final VoidCallback? onRedo;
   final VoidCallback? onCreateCheckpoint;
@@ -30,6 +31,7 @@ class AppMenuBar extends StatelessWidget {
     this.onOpenProject,
     this.onSaveProject,
     this.onCloseProject,
+    this.onOpenProjectLocation,
     this.onUndo,
     this.onRedo,
     this.onCreateCheckpoint,
@@ -85,6 +87,13 @@ class AppMenuBar extends StatelessWidget {
                 icon: Icons.close,
                 label: 'Fechar Projeto',
                 onPressed: onCloseProject,
+              ),
+              const _MenuDivider(),
+              _MenuItem(
+                icon: Icons.folder,
+                label: 'Abrir Localização do Projeto',
+                onPressed: onOpenProjectLocation,
+                enabled: onOpenProjectLocation != null,
               ),
             ],
           ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
+import 'dart:io';
 import 'models/node.dart';
 import 'services/project_service.dart';
 import 'services/command_history.dart';
@@ -970,6 +971,46 @@ class _MyHomePageState extends State<MyHomePage> {
     _checkpointManager.clearCheckpoints();
   }
 
+  Future<void> _handleOpenProjectLocation() async {
+    if (_currentProjectPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum projeto aberto')),
+      );
+      return;
+    }
+
+    try {
+      final directory = Directory(_currentProjectPath!);
+      if (!directory.existsSync()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A pasta do projeto não existe mais')),
+        );
+        return;
+      }
+
+      // Abre o explorador de arquivos na pasta do projeto
+      if (Platform.isWindows) {
+        // Windows: usa explorer.exe
+        await Process.run('explorer.exe', [_currentProjectPath!]);
+      } else if (Platform.isLinux) {
+        // Linux: usa xdg-open
+        await Process.run('xdg-open', [_currentProjectPath!]);
+      } else if (Platform.isMacOS) {
+        // macOS: usa open
+        await Process.run('open', [_currentProjectPath!]);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sistema operacional não suportado')),
+        );
+      }
+    } catch (e) {
+      print('❌ Erro ao abrir localização do projeto: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao abrir localização: $e')),
+      );
+    }
+  }
+
   // ========== Métodos de Undo/Redo ==========
 
   Future<void> _handleUndo() async {
@@ -1161,8 +1202,8 @@ class _MyHomePageState extends State<MyHomePage> {
         // Adicionar node - só funciona quando não está editando
         LogicalKeySet(LogicalKeyboardKey.keyN): const _AddNodeGlobalIntent(),
         // Deletar node - só funciona quando não está editando
+        // Apenas DEL (Delete), não Backspace
         LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
-        LogicalKeySet(LogicalKeyboardKey.backspace): const _DeleteNodeGlobalIntent(),
       },
       child: Actions(
         actions: {
@@ -1293,6 +1334,7 @@ class _MyHomePageState extends State<MyHomePage> {
             onOpenProject: _handleOpenProject,
             onSaveProject: _handleSaveProject,
             onCloseProject: _handleCloseProject,
+            onOpenProjectLocation: _handleOpenProjectLocation,
             onUndo: _handleUndo,
             onRedo: _handleRedo,
             onCreateCheckpoint: _handleCreateCheckpoint,
