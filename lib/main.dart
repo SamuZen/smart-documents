@@ -30,6 +30,8 @@ import 'theme/app_theme.dart';
 import 'widgets/git_status_indicator.dart';
 import 'widgets/composer_window.dart';
 import 'services/prompt_storage_service.dart';
+import 'widgets/llm_execution_dialog.dart';
+import 'widgets/llm_history_window.dart';
 
 void main() {
   runApp(const MyApp());
@@ -64,6 +66,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showActionsWindow = true;
   bool _showDocumentEditor = true;
   bool _showComposerWindow = false;
+  bool _showHistoryWindow = false;
   String? _selectedNodeId;
   bool _isEditing = false;
   final Set<String> _expandedNodes = {}; // Rastreia nodes expandidos
@@ -88,6 +91,9 @@ class _MyHomePageState extends State<MyHomePage> {
   
   // FocusNode principal para capturar atalhos globais
   final FocusNode _mainFocusNode = FocusNode();
+  
+  // GlobalKey para acessar o ComposerWindow
+  final GlobalKey _composerWindowKey = GlobalKey();
 
   @override
   void initState() {
@@ -1811,10 +1817,38 @@ class _MyHomePageState extends State<MyHomePage> {
                 _showComposerWindow = !_showComposerWindow;
               });
             },
+            onCallPromptComposer: () {
+              // Obtém o prompt e abre o dialog de execução
+              final prompt = ComposerWindow.getFormattedPrompt(_composerWindowKey);
+              if (prompt == null || prompt.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Prompt vazio. Selecione nodes ou prompts no Prompt Composer.',
+                      style: TextStyle(color: AppTheme.textPrimary),
+                    ),
+                    backgroundColor: AppTheme.surfaceVariantDark,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+                return;
+              }
+              LLMExecutionDialog.show(
+                context: context,
+                prompt: prompt,
+                projectPath: _currentProjectPath,
+              );
+            },
+            onShowHistory: () {
+              setState(() {
+                _showHistoryWindow = !_showHistoryWindow;
+              });
+            },
             showNavigation: _showWindow,
             showActions: _showActionsWindow,
             showDocumentEditor: _showDocumentEditor,
             showComposer: _showComposerWindow,
+            showHistory: _showHistoryWindow,
             onOpenSettings: _handleOpenSettings,
           ),
           // Conteúdo principal
@@ -1902,6 +1936,15 @@ class _MyHomePageState extends State<MyHomePage> {
                             selectedNode: _getSelectedNode(),
                             isEditing: _isEditing,
                             isExpanded: _getSelectedNodeExpansionState(),
+                            getPromptCallback: () {
+                              // Obtém o prompt do ComposerWindow usando GlobalKey
+                              final widget = _composerWindowKey.currentWidget;
+                              if (widget != null && widget is ComposerWindow) {
+                                return ComposerWindow.getFormattedPrompt(_composerWindowKey);
+                              }
+                              return null;
+                            },
+                            projectPath: _currentProjectPath,
                           ),
                         ),
                       // Janela flutuante com DocumentEditor
@@ -1979,9 +2022,28 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           child: ComposerWindow(
-                            key: ValueKey('composer_${_rootNode.id}_${_promptsRootNode.id}'),
+                            key: _composerWindowKey,
                             rootNode: _rootNode,
                             promptsRootNode: _promptsRootNode,
+                            projectPath: _currentProjectPath,
+                          ),
+                        ),
+                      // Janela de histórico de Smart Actions
+                      if (_showHistoryWindow)
+                        DraggableResizableWindow(
+                          key: const ValueKey('history_window'),
+                          title: 'Histórico Smart Actions',
+                          initialWidth: 600,
+                          initialHeight: 500,
+                          minWidth: 500,
+                          minHeight: 400,
+                          initialPosition: const Offset(200, 100),
+                          onClose: () {
+                            setState(() {
+                              _showHistoryWindow = false;
+                            });
+                          },
+                          child: LLMHistoryWindow(
                             projectPath: _currentProjectPath,
                           ),
                         ),

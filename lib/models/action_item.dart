@@ -4,6 +4,7 @@ enum ActionCategory {
   keyboard,
   mouse,
   context,
+  smart,
 }
 
 class ActionItem {
