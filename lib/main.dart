@@ -28,6 +28,8 @@ import 'commands/set_node_field_types_command.dart';
 import 'theme/app_theme.dart';
 import 'widgets/git_status_indicator.dart';
 import 'widgets/composer_window.dart';
+import 'services/prompt_manager_service.dart';
+import 'services/prompt_storage_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -77,6 +79,9 @@ class _MyHomePageState extends State<MyHomePage> {
   final CommandRegistry _commandRegistry = CommandRegistry.instance;
   String? _undoDescription;
   String? _redoDescription;
+  
+  // Gerenciamento de prompts
+  final PromptManagerService _promptManager = PromptManagerService();
   
   // FocusNode principal para capturar atalhos globais
   final FocusNode _mainFocusNode = FocusNode();
@@ -727,6 +732,9 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    // Salva prompts (pode estar vazio inicialmente)
+    await PromptStorageService.savePrompts(projectPath, _promptManager.getAllPrompts());
+
     // Adiciona à lista de projetos recentes
     await Preferences.addRecentProject(projectPath, projectName);
 
@@ -777,6 +785,10 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    // Carrega prompts
+    final prompts = await PromptStorageService.loadPrompts(projectPath);
+    _promptManager.loadPrompts(prompts);
+
     // Adiciona à lista de projetos recentes
     await Preferences.addRecentProject(projectPath, loadedNode.name);
 
@@ -823,6 +835,10 @@ class _MyHomePageState extends State<MyHomePage> {
       }
       return;
     }
+
+    // Carrega prompts
+    final prompts = await PromptStorageService.loadPrompts(projectPath);
+    _promptManager.loadPrompts(prompts);
 
     // Adiciona à lista de projetos recentes (move para o topo)
     await Preferences.addRecentProject(projectPath, loadedNode.name);
@@ -926,6 +942,9 @@ class _MyHomePageState extends State<MyHomePage> {
         return;
       }
 
+      // Salva prompts
+      await PromptStorageService.savePrompts(projectPath, _promptManager.getAllPrompts());
+
       // Adiciona à lista de projetos recentes
       await Preferences.addRecentProject(projectPath, projectName);
 
@@ -950,6 +969,9 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         return;
       }
+
+      // Salva prompts
+      await PromptStorageService.savePrompts(_currentProjectPath!, _promptManager.getAllPrompts());
 
       setState(() {
         _hasUnsavedChanges = false;
@@ -1504,6 +1526,8 @@ class _MyHomePageState extends State<MyHomePage> {
                           },
                           child: ComposerWindow(
                             rootNode: _rootNode,
+                            promptManager: _promptManager,
+                            projectPath: _currentProjectPath,
                           ),
                         ),
                       // Indicador de status do Git no canto inferior direito

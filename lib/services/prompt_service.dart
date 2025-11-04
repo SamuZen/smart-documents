@@ -1,12 +1,18 @@
 import '../models/node.dart';
+import '../models/prompt.dart';
 import 'prompt_formatter.dart';
+import 'prompt_manager_service.dart';
 
 /// Serviço para gerenciar estado de seleção e geração de prompts
 class PromptService {
   final Node rootNode;
   final Set<String> _selectedNodeIds = {};
+  final PromptManagerService? promptManager;
 
-  PromptService({required this.rootNode});
+  PromptService({
+    required this.rootNode,
+    this.promptManager,
+  });
 
   /// Adiciona um node à seleção
   void selectNode(String nodeId) {
@@ -87,23 +93,64 @@ class PromptService {
   /// 
   /// [includeChildren] - Se true, inclui filhos recursivamente dos nodes selecionados
   String generatePrompt({bool includeChildren = false}) {
-    final selectedNodes = getSelectedNodes();
-    
-    if (selectedNodes.isEmpty) {
-      return '[]';
+    final buffer = StringBuffer();
+
+    // 1. Prompts com order = "start"
+    if (promptManager != null) {
+      final startPrompts = promptManager!.getPromptsByOrder(PromptOrder.start);
+      for (final prompt in startPrompts) {
+        buffer.writeln(prompt.prompt);
+        buffer.writeln(); // Linha em branco após cada prompt
+      }
     }
 
-    final count = selectedNodes.length;
-    final countText = count == 1 ? '1 node selecionado' : '$count nodes selecionados';
-    final introText = '$countText para contexto:\n\n';
+    // 2. Conteúdo JSON dos nodes (existente)
+    final selectedNodes = getSelectedNodes();
+    
+    if (selectedNodes.isNotEmpty) {
+      final count = selectedNodes.length;
+      final countText = count == 1 ? '1 node selecionado' : '$count nodes selecionados';
+      final introText = '$countText para contexto:\n\n';
 
-    final jsonContent = PromptFormatter.formatNodesForLLM(
-      selectedNodes,
-      selectedNodeIds: _selectedNodeIds,
-      includeChildren: includeChildren,
-    );
+      final jsonContent = PromptFormatter.formatNodesForLLM(
+        selectedNodes,
+        selectedNodeIds: _selectedNodeIds,
+        includeChildren: includeChildren,
+      );
 
-    return introText + jsonContent;
+      buffer.write(introText);
+      buffer.write(jsonContent);
+    } else {
+      // Se não há nodes selecionados, apenas retorna '[]'
+      buffer.write('[]');
+    }
+
+    // 3. Prompts com order = "after"
+    if (promptManager != null) {
+      final afterPrompts = promptManager!.getPromptsByOrder(PromptOrder.after);
+      if (afterPrompts.isNotEmpty) {
+        buffer.writeln();
+        buffer.writeln();
+      }
+      for (final prompt in afterPrompts) {
+        buffer.writeln(prompt.prompt);
+        buffer.writeln(); // Linha em branco após cada prompt
+      }
+    }
+
+    // 4. Prompts com order = "end"
+    if (promptManager != null) {
+      final endPrompts = promptManager!.getPromptsByOrder(PromptOrder.end);
+      if (endPrompts.isNotEmpty && selectedNodes.isNotEmpty) {
+        buffer.writeln();
+      }
+      for (final prompt in endPrompts) {
+        buffer.writeln(prompt.prompt);
+        buffer.writeln(); // Linha em branco após cada prompt
+      }
+    }
+
+    return buffer.toString().trim(); // Remove espaços em branco extras no final
   }
 
   /// Valida se a seleção é válida antes de gerar prompt
