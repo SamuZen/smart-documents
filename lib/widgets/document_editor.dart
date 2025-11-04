@@ -36,6 +36,39 @@ class _DocumentEditorState extends State<DocumentEditor> {
   late final FocusNode _newFieldValueFocusNode;
   bool _showAddField = false;
 
+  // Chave especial para armazenar metadados de tipos de campos
+  static const String _fieldTypesKey = '__fieldTypes__';
+
+  /// Carrega os tipos de campos dos metadados do node
+  Map<String, String> _loadFieldTypes() {
+    if (widget.selectedNode == null) return {};
+    final fields = widget.selectedNode!.fields;
+    final typesData = fields[_fieldTypesKey];
+    if (typesData is Map) {
+      return Map<String, String>.from(typesData.map((k, v) => MapEntry(k.toString(), v.toString())));
+    }
+    return {};
+  }
+
+  /// Salva o tipo de um campo específico nos metadados
+  void _saveFieldType(String key, String type) {
+    if (widget.selectedNode == null) return;
+    
+    // Atualiza o tipo localmente
+    _fieldTypes[key] = type;
+    
+    // Salva nos metadados do node através de um campo especial
+    final currentFields = Map<String, dynamic>.from(widget.selectedNode!.fields);
+    final typesData = currentFields[_fieldTypesKey];
+    final typesMap = typesData is Map 
+        ? Map<String, dynamic>.from(typesData)
+        : <String, dynamic>{};
+    typesMap[key] = type;
+    
+    // Salva os metadados usando onFieldChanged para que sejam persistidos
+    widget.onFieldChanged(widget.selectedNode!.id, _fieldTypesKey, typesMap);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -114,8 +147,15 @@ class _DocumentEditorState extends State<DocumentEditor> {
     final node = widget.selectedNode!;
     final newFields = node.fields;
     
+    // IMPORTANTE: Carrega os tipos persistidos dos metadados do node
+    // Os tipos dos metadados têm prioridade sobre os tipos em memória
+    final persistedTypes = _loadFieldTypes();
+    for (final entry in persistedTypes.entries) {
+      _fieldTypes[entry.key] = entry.value;
+    }
+    
     // Remove controllers de campos que não existem mais
-    final keysToRemove = _controllers.keys.where((key) => !newFields.containsKey(key)).toList();
+    final keysToRemove = _controllers.keys.where((key) => !newFields.containsKey(key) || key == _fieldTypesKey).toList();
     for (final key in keysToRemove) {
       _controllers[key]?.dispose();
       _controllers.remove(key);
@@ -128,6 +168,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
     
     // Atualiza ou cria controllers para campos existentes
     newFields.forEach((key, value) {
+      // Ignora o campo de metadados
+      if (key == _fieldTypesKey) return;
+      
       final isEditing = _focusNodes[key]?.hasFocus ?? false;
       
       if (_controllers.containsKey(key)) {
@@ -139,16 +182,28 @@ class _DocumentEditorState extends State<DocumentEditor> {
           if (_descriptionControllers.containsKey(key) && _descriptionControllers[key]!.text != currentValue) {
             _descriptionControllers[key]!.text = currentValue;
           }
-          _fieldTypes[key] = _getValueType(value);
+          // Preserva o tipo se já existe (dos metadados ou memória), senão detecta
+          if (!_fieldTypes.containsKey(key)) {
+            _fieldTypes[key] = _getValueType(value);
+          }
         }
       } else {
         _controllers[key] = TextEditingController(text: _valueToString(value));
-        _fieldTypes[key] = _getValueType(value);
+        // IMPORTANTE: Carrega o tipo dos metadados persistidos primeiro
+        // Se não existe em metadados, usa o tipo detectado
+        if (!_fieldTypes.containsKey(key)) {
+          _fieldTypes[key] = _getValueType(value);
+        }
+        final savedType = _fieldTypes[key]!;
         _focusNodes[key] = FocusNode();
         
-        // Se for tipo "text" ou string longo (>50 chars), cria controller separado para textarea
-        final valueType = _getValueType(value);
-        if (valueType == 'text' || (valueType == 'String' && _valueToString(value).length > 50)) {
+        // IMPORTANTE: Se for tipo "text", SEMPRE cria descriptionController, independente do tamanho
+        // Se for "String" longo (>50 chars), também cria
+        if (savedType == 'text') {
+          // Tipo "text" sempre usa textarea
+          _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
+        } else if (savedType == 'String' && _valueToString(value).length > 50) {
+          // String longo também usa textarea
           _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
         }
         
@@ -250,6 +305,13 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
     final value = _parseValue(valueStr, type);
     widget.onFieldAdded(widget.selectedNode!.id, key, value);
+    
+    // IMPORTANTE: Salva o tipo do campo em _fieldTypes ANTES de atualizar controllers
+    // Isso garante que campos "text" sejam reconhecidos corretamente
+    _fieldTypes[key] = type;
+    
+    // IMPORTANTE: Persiste o tipo nos metadados do node para que seja preservado ao fechar/abrir
+    _saveFieldType(key, type);
 
     _newFieldKeyController.clear();
     _newFieldValueController.clear();
@@ -290,6 +352,231 @@ class _DocumentEditorState extends State<DocumentEditor> {
     _fieldTypes.remove(key);
     _descriptionControllers[key]?.dispose();
     _descriptionControllers.remove(key);
+  }
+
+  /// Abre um dialog para editar texto longo em um campo maior
+  Future<void> _openTextEditorDialog(String key, TextEditingController controller) async {
+    final editedText = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        final textController = TextEditingController(text: controller.text);
+        
+        return Dialog(
+          backgroundColor: AppTheme.surfaceElevated,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.7,
+            height: MediaQuery.of(context).size.height * 0.7,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Icon(Icons.article, size: 20, color: AppTheme.neonBlue),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Editar: $key',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 20, color: AppTheme.textSecondary),
+                      onPressed: () => Navigator.of(dialogContext).pop(null),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Campo de texto grande
+                Expanded(
+                  child: TextField(
+                    controller: textController,
+                    autofocus: true,
+                    maxLines: null,
+                    expands: true,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.textPrimary,
+                      height: 1.5,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Digite o texto...',
+                      contentPadding: const EdgeInsets.all(16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.borderNeutral),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.borderNeutral),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
+                      ),
+                      filled: true,
+                      fillColor: AppTheme.surfaceVariantDark,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Botões
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(null),
+                      child: Text(
+                        'Cancelar',
+                        style: TextStyle(color: AppTheme.textSecondary),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(textController.text),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.neonBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Salvar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // Se o usuário salvou (não cancelou), atualiza o campo
+    if (editedText != null && widget.selectedNode != null) {
+      controller.text = editedText;
+      _confirmFieldEdit(key);
+    }
+  }
+
+  /// Abre um dialog para editar texto longo enquanto está criando um novo campo
+  Future<void> _openNewFieldTextEditorDialog() async {
+    final editedText = await showDialog<String>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        final textController = TextEditingController(text: _newFieldValueController.text);
+        
+        return Dialog(
+          backgroundColor: AppTheme.surfaceElevated,
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.7,
+            height: MediaQuery.of(context).size.height * 0.7,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Icon(Icons.article, size: 20, color: AppTheme.neonBlue),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Editar Valor',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close, size: 20, color: AppTheme.textSecondary),
+                      onPressed: () => Navigator.of(dialogContext).pop(null),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Campo de texto grande
+                Expanded(
+                  child: TextField(
+                    controller: textController,
+                    autofocus: true,
+                    maxLines: null,
+                    expands: true,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.textPrimary,
+                      height: 1.5,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Digite o texto...',
+                      contentPadding: const EdgeInsets.all(16),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.borderNeutral),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.borderNeutral),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
+                      ),
+                      filled: true,
+                      fillColor: AppTheme.surfaceVariantDark,
+                    ),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                
+                // Botões
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(null),
+                      child: Text(
+                        'Cancelar',
+                        style: TextStyle(color: AppTheme.textSecondary),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(textController.text),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.neonBlue,
+                        foregroundColor: Colors.white,
+                      ),
+                      child: const Text('Salvar'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    // Se o usuário salvou (não cancelou), atualiza o campo de valor
+    if (editedText != null) {
+      setState(() {
+        _newFieldValueController.text = editedText;
+      });
+    }
   }
 
   @override
@@ -384,18 +671,32 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                     )
                   else
-                    ...fields.entries.map((entry) {
+                    ...fields.entries.where((entry) => entry.key != _fieldTypesKey).map((entry) {
                       final key = entry.key;
                       final value = entry.value;
+                      // IMPORTANTE: Preserva o tipo se já existe, senão tenta detectar
+                      // Se não existe em _fieldTypes, usa _getValueType que pode retornar "String" por padrão
+                      // Mas se o campo foi criado como "text", precisa estar em _fieldTypes
                       final type = _fieldTypes[key] ?? _getValueType(value);
                       
                       if (!_controllers.containsKey(key)) {
                         _controllers[key] = TextEditingController(text: _valueToString(value));
-                        _fieldTypes[key] = type;
+                        // PRIORIDADE: Garante que o tipo seja salvo em _fieldTypes
+                        // Se não existe, usa o tipo detectado
+                        final currentType = _fieldTypes[key] ?? type;
+                        if (!_fieldTypes.containsKey(key)) {
+                          _fieldTypes[key] = currentType;
+                        }
                         _focusNodes[key] = FocusNode();
                         
-                        // Se for tipo "text" ou string longo (>50 chars), cria controller separado para textarea
-                        if (type == 'text' || (type == 'String' && _valueToString(value).length > 50)) {
+                        // IMPORTANTE: Se for tipo "text", SEMPRE cria descriptionController
+                        // Se for "String" longo (>50 chars), também cria
+                        final savedType = _fieldTypes[key] ?? currentType;
+                        if (savedType == 'text') {
+                          // Tipo "text" sempre usa textarea, independente do tamanho
+                          _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
+                        } else if (savedType == 'String' && _valueToString(value).length > 50) {
+                          // String longo também usa textarea
                           _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
                         }
                         
@@ -413,14 +714,42 @@ class _DocumentEditorState extends State<DocumentEditor> {
                           ? _descriptionControllers[key]!
                           : _controllers[key]!;
                       final focusNode = _focusNodes[key]!;
-                      final isString = type == 'String';
-                      final isText = type == 'text';
-                      final isLongString = _descriptionControllers.containsKey(key) || isText;
-                      final isBool = type == 'bool';
+                      
+                      // PRIORIDADE: Usa o tipo salvo em _fieldTypes
+                      // Se não existe em _fieldTypes, tenta detectar:
+                      // - Se tem _descriptionControllers E não é string longo (>50), provavelmente é "text"
+                      // - Senão, usa o tipo detectado pelo valor (que será "String" para strings)
+                      final savedType = _fieldTypes[key];
+                      final hasDescriptionController = _descriptionControllers.containsKey(key);
+                      final isLongStringAuto = type == 'String' && _valueToString(value).length > 50;
+                      
+                      String finalType;
+                      if (savedType != null) {
+                        // Se tem tipo salvo, usa ele (garante que campos "text" sejam sempre reconhecidos)
+                        finalType = savedType;
+                      } else if (hasDescriptionController && !isLongStringAuto) {
+                        // Se tem descriptionController mas não foi criado automaticamente por ser longo,
+                        // provavelmente é "text"
+                        finalType = 'text';
+                        _fieldTypes[key] = 'text'; // Salva para próxima vez
+                      } else {
+                        // Senão, usa o tipo detectado (pode ser "String" para strings normais)
+                        finalType = type;
+                      }
+                      
+                      final isString = finalType == 'String';
+                      final isText = finalType == 'text'; // SEMPRE mostra botão se tipo for "text"
+                      final isLongString = hasDescriptionController || isText;
+                      final isBool = finalType == 'bool';
+                      
+                      // Debug para verificar se o tipo está correto
+                      if (isText) {
+                        print('🔵 [DocumentEditor] Campo "$key" é do tipo "text", isText=$isText, finalType=$finalType, savedType=$savedType');
+                      }
                       
                       return _buildPropertyRow(
                         key: key,
-                        type: type,
+                        type: finalType, // Usa o tipo salvo, não o detectado
                         value: value,
                         controller: controller,
                         focusNode: focusNode,
@@ -525,30 +854,47 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                         ],
                                       )
                                     : _newFieldType == 'text'
-                                        ? TextField(
-                                            controller: _newFieldValueController,
-                                            focusNode: _newFieldValueFocusNode,
-                                            maxLines: null,
-                                            minLines: 4,
-                                            style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                                            decoration: InputDecoration(
-                                              hintText: 'Digite o texto longo...',
-                                              isDense: true,
-                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                              border: OutlineInputBorder(
-                                                borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                        ? Row(
+                                            children: [
+                                              Expanded(
+                                                child: TextField(
+                                                  controller: _newFieldValueController,
+                                                  focusNode: _newFieldValueFocusNode,
+                                                  maxLines: null,
+                                                  minLines: 4,
+                                                  style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                                                  decoration: InputDecoration(
+                                                    hintText: 'Digite o texto longo...',
+                                                    isDense: true,
+                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                                    border: OutlineInputBorder(
+                                                      borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                    ),
+                                                    enabledBorder: OutlineInputBorder(
+                                                      borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                                    ),
+                                                    focusedBorder: OutlineInputBorder(
+                                                      borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                                    ),
+                                                    filled: true,
+                                                    fillColor: _newFieldValueFocusNode.hasFocus
+                                                        ? AppTheme.neonBlue.withOpacity(0.1)
+                                                        : AppTheme.surfaceVariantDark,
+                                                  ),
+                                                ),
                                               ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                              // Botão para abrir popup de edição maior (enquanto está criando)
+                                              Padding(
+                                                padding: const EdgeInsets.only(left: 4),
+                                                child: IconButton(
+                                                  icon: Icon(Icons.open_in_full, size: 16, color: AppTheme.neonBlue),
+                                                  onPressed: () => _openNewFieldTextEditorDialog(),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                                  tooltip: 'Abrir editor maior',
+                                                ),
                                               ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
-                                              ),
-                                              filled: true,
-                                              fillColor: _newFieldValueFocusNode.hasFocus
-                                                  ? AppTheme.neonBlue.withOpacity(0.1)
-                                                  : AppTheme.surfaceVariantDark,
-                                            ),
+                                            ],
                                           )
                                         : _buildCompactTextField(
                                             controller: _newFieldValueController,
@@ -672,33 +1018,52 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       // Campo de texto
                       Expanded(
                         child: isLongString
-                            ? TextField(
-                                controller: controller,
-                                focusNode: focusNode,
-                                maxLines: isText ? null : 3, // text pode expandir infinitamente
-                                minLines: isText ? 4 : 2,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textPrimary,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: 'Digite o texto...',
-                                  isDense: true,
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                  border: OutlineInputBorder(
-                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: controller,
+                                      focusNode: focusNode,
+                                      maxLines: isText ? null : 3, // text pode expandir infinitamente
+                                      minLines: isText ? 4 : 2,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                      decoration: InputDecoration(
+                                        hintText: 'Digite o texto...',
+                                        isDense: true,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                        border: OutlineInputBorder(
+                                          borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                        ),
+                                        filled: true,
+                                        fillColor: focusNode.hasFocus
+                                            ? AppTheme.neonBlue.withOpacity(0.1)
+                                            : AppTheme.surfaceVariantDark,
+                                      ),
+                                    ),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
-                                  ),
-                                  filled: true,
-                                  fillColor: focusNode.hasFocus
-                                      ? AppTheme.neonBlue.withOpacity(0.1)
-                                      : AppTheme.surfaceVariantDark,
-                                ),
+                                  // Botão para abrir popup de edição maior (SEMPRE para tipo "text")
+                                  // Aparece sempre que o tipo for "text", independente do tamanho
+                                  if (isText)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 4),
+                                      child: IconButton(
+                                        icon: Icon(Icons.open_in_full, size: 16, color: AppTheme.neonBlue),
+                                        onPressed: () => _openTextEditorDialog(key, controller),
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                                        tooltip: 'Abrir editor maior',
+                                      ),
+                                    ),
+                                ],
                               )
                             : TextField(
                                 controller: controller,
