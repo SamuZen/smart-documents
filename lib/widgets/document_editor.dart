@@ -48,6 +48,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
   final Map<String, String> _fieldTypes = {};
   final Map<String, FocusNode> _focusNodes = {};
   final Map<String, TextEditingController> _descriptionControllers = {}; // Para campos de texto longo
+  final Map<String, List<String>> _enumOptions = {}; // Opções para campos do tipo enum
   String _newFieldType = 'String';
   final TextEditingController _newFieldKeyController = TextEditingController();
   final TextEditingController _newFieldValueController = TextEditingController();
@@ -173,8 +174,15 @@ class _DocumentEditorState extends State<DocumentEditor> {
     // IMPORTANTE: Carrega os tipos persistidos dos metadados do node
     // Os tipos dos metadados têm prioridade sobre os tipos em memória
     final persistedTypes = _loadFieldTypes();
+    _enumOptions.clear();
     for (final entry in persistedTypes.entries) {
       _fieldTypes[entry.key] = entry.value;
+      
+      // Se for campo "order" de prompt, define como enum com opções
+      if (_isPromptNode && entry.key == 'order') {
+        _fieldTypes[entry.key] = 'enum';
+        _enumOptions[entry.key] = ['start', 'after', 'end'];
+      }
     }
     
     // Remove controllers de campos que não existem mais
@@ -264,6 +272,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return Icons.article;
       case 'image':
         return Icons.image;
+      case 'enum':
+        return Icons.arrow_drop_down_circle;
       case 'String':
       default:
         return Icons.text_fields;
@@ -280,6 +290,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return AppTheme.neonCyan;
       case 'image':
         return AppTheme.neonBlue;
+      case 'enum':
+        return AppTheme.neonCyan;
       case 'String':
       default:
         return AppTheme.textSecondary;
@@ -888,6 +900,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       final isLongString = hasDescriptionController || isText;
                       final isBool = finalType == 'bool';
                       final isImage = finalType == 'image';
+                      final isEnum = finalType == 'enum';
                       
                       // Debug para verificar se o tipo está correto
                       if (isText) {
@@ -905,6 +918,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         isLongString: isLongString,
                         isBool: isBool,
                         isImage: isImage,
+                        isEnum: isEnum,
                       );
                     }),
                   
@@ -1175,6 +1189,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
     required bool isLongString,
     required bool isBool,
     required bool isImage,
+    required bool isEnum,
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -1306,9 +1321,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                     ],
                   )
-                : isImage
-                    ? _buildImageField(key, value, controller)
-                    : Row(
+                : isEnum
+                    ? _buildEnumField(key, value, controller)
+                    : isImage
+                        ? _buildImageField(key, value, controller)
+                        : Row(
                     children: [
                       // Ícone do tipo
                       Icon(
@@ -1471,6 +1488,82 @@ class _DocumentEditorState extends State<DocumentEditor> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Constrói um campo do tipo enum com dropdown
+  Widget _buildEnumField(String key, dynamic value, TextEditingController controller) {
+    final options = _enumOptions[key] ?? [];
+    final currentValue = value?.toString() ?? '';
+    final selectedValue = options.contains(currentValue) ? currentValue : (options.isNotEmpty ? options.first : null);
+    
+    // Atualiza o controller com o valor atual
+    if (controller.text != currentValue) {
+      controller.text = currentValue;
+    }
+    
+    return Row(
+      children: [
+        // Ícone do tipo enum
+        Icon(
+          _getIconForType('enum'),
+          size: 14,
+          color: _getIconColorForType('enum'),
+        ),
+        const SizedBox(width: 6),
+        
+        // Dropdown
+        Expanded(
+          child: DropdownButton<String>(
+            value: selectedValue,
+            isExpanded: true,
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.textPrimary,
+            ),
+            dropdownColor: AppTheme.surfaceDark,
+            underline: Container(
+              height: 1,
+              color: AppTheme.borderNeutral,
+            ),
+            icon: Icon(
+              Icons.arrow_drop_down,
+              color: AppTheme.textSecondary,
+            ),
+            items: options.map((String option) {
+              // Traduz os valores para português
+              String displayText = option;
+              if (option == 'start') {
+                displayText = 'Início (Start)';
+              } else if (option == 'after') {
+                displayText = 'Após (After)';
+              } else if (option == 'end') {
+                displayText = 'Fim (End)';
+              }
+              
+              return DropdownMenuItem<String>(
+                value: option,
+                child: Text(displayText),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              if (newValue != null && newValue != currentValue) {
+                controller.text = newValue;
+                widget.onFieldChanged(widget.selectedNode!.id, key, newValue);
+              }
+            },
+          ),
+        ),
+        
+        // Botão remover
+        IconButton(
+          icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+          onPressed: _isRequiredPromptField(key) ? null : () => _removeField(key),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+          tooltip: _isRequiredPromptField(key) ? 'Campo obrigatório' : 'Remover',
+        ),
+      ],
     );
   }
 

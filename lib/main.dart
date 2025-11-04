@@ -772,7 +772,7 @@ class _MyHomePageState extends State<MyHomePage> {
         },
         fieldTypes: {
           'prompt': 'text',
-          'order': 'String',
+          'order': 'enum', // Tipo enum para mostrar dropdown
           'index': 'number',
         },
       );
