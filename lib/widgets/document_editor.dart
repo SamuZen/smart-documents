@@ -3,13 +3,13 @@ import 'package:flutter/services.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
 
-/// Widget para editar campos personalizados de um node
+/// Widget para editar campos personalizados de um node (inspector-style)
 class DocumentEditor extends StatefulWidget {
   final Node? selectedNode;
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldChanged;
   final Function(String nodeId, String fieldKey) onFieldRemoved;
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldAdded;
-  final FocusNode? mainAppFocusNode; // FocusNode principal da aplicação para devolver o foco
+  final FocusNode? mainAppFocusNode;
 
   const DocumentEditor({
     super.key,
@@ -26,118 +26,21 @@ class DocumentEditor extends StatefulWidget {
 
 class _DocumentEditorState extends State<DocumentEditor> {
   final Map<String, TextEditingController> _controllers = {};
-  final Map<String, String> _fieldTypes = {}; // Armazena tipo de cada campo
-  final Map<String, FocusNode> _focusNodes = {}; // Rastreia nodes de foco para evitar atualizar durante edição
+  final Map<String, String> _fieldTypes = {};
+  final Map<String, FocusNode> _focusNodes = {};
+  final Map<String, TextEditingController> _descriptionControllers = {}; // Para campos de texto longo
   String _newFieldType = 'String';
   final TextEditingController _newFieldKeyController = TextEditingController();
   final TextEditingController _newFieldValueController = TextEditingController();
   late final FocusNode _newFieldKeyFocusNode;
   late final FocusNode _newFieldValueFocusNode;
+  bool _showAddField = false;
 
   @override
   void initState() {
     super.initState();
-    _newFieldKeyFocusNode = FocusNode()..addListener(() {
-      if (mounted) {
-        final hasFocus = _newFieldKeyFocusNode.hasFocus;
-        print('🔄 [DocumentEditor] Campo "Nome do campo" foco mudou: hasFocus=$hasFocus');
-        
-        if (!hasFocus) {
-          // Se o campo de nome perdeu o foco, verifica se devolve para o widget principal
-          print('   Campo "Nome do campo" perdeu foco');
-          _returnFocusToMain();
-        }
-      }
-    });
-    _newFieldValueFocusNode = FocusNode()..addListener(() {
-      if (mounted) {
-        final hasFocus = _newFieldValueFocusNode.hasFocus;
-        print('🔄 [DocumentEditor] Campo "Valor inicial" foco mudou: hasFocus=$hasFocus');
-        
-        setState(() {}); // Atualiza visual quando foco muda
-        if (!hasFocus) {
-          // Se o campo de valor inicial perdeu o foco, devolve para o widget principal
-          print('   Campo "Valor inicial" perdeu foco');
-          _returnFocusToMain();
-        }
-      }
-    });
-  }
-
-  /// Devolve o foco para o widget principal quando nenhum campo está focado
-  void _returnFocusToMain() {
-    print('🔄 [DocumentEditor] _returnFocusToMain chamado');
-    
-    // Verifica se algum campo ainda está focado
-    final hasExistingFieldFocused = _focusNodes.values.any((node) => node.hasFocus);
-    final hasNewKeyFocused = _newFieldKeyFocusNode.hasFocus;
-    final hasNewValueFocused = _newFieldValueFocusNode.hasFocus;
-    final hasAnyFieldFocused = hasExistingFieldFocused || hasNewKeyFocused || hasNewValueFocused;
-    
-    print('   Campos existentes focados: $hasExistingFieldFocused');
-    print('   Campo "Nome" focado: $hasNewKeyFocused');
-    print('   Campo "Valor inicial" focado: $hasNewValueFocused');
-    print('   Algum campo focado: $hasAnyFieldFocused');
-    
-    if (!hasAnyFieldFocused && mounted) {
-      print('✅ [DocumentEditor] Nenhum campo focado, devolvendo foco ao widget principal');
-      
-      // Nenhum campo está focado, devolve o foco para o widget principal
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          print('🔄 [DocumentEditor] Executando unfocus no próximo frame');
-          
-          // Primeiro, remove o foco de todos os campos explicitamente
-          for (final focusNode in _focusNodes.values) {
-            if (focusNode.hasFocus) {
-              focusNode.unfocus();
-            }
-          }
-          if (_newFieldKeyFocusNode.hasFocus) {
-            _newFieldKeyFocusNode.unfocus();
-          }
-          if (_newFieldValueFocusNode.hasFocus) {
-            _newFieldValueFocusNode.unfocus();
-          }
-          
-          // Usa FocusScope para unfocus todos os campos
-          FocusScope.of(context).unfocus();
-          
-          // Verifica o estado atual antes de solicitar foco no principal
-          final focusScope = FocusScope.of(context);
-          final focusedBefore = focusScope.focusedChild;
-          final primaryFocus = FocusManager.instance.primaryFocus;
-          print('   Foco antes: ${focusedBefore?.runtimeType}, primaryFocus: ${primaryFocus?.runtimeType}');
-          
-          // Solicita explicitamente o foco no FocusNode principal da aplicação
-          if (widget.mainAppFocusNode != null && !widget.mainAppFocusNode!.hasFocus) {
-            print('✅ [DocumentEditor] Solicitando foco explicitamente no mainAppFocusNode');
-            widget.mainAppFocusNode!.requestFocus();
-            
-            // Verifica após solicitar foco
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                final focusedAfter = focusScope.focusedChild;
-                final primaryFocusAfter = FocusManager.instance.primaryFocus;
-                print('   Foco após solicitar: ${focusedAfter?.runtimeType}, primaryFocus: ${primaryFocusAfter?.runtimeType}');
-                print('   mainAppFocusNode.hasFocus: ${widget.mainAppFocusNode?.hasFocus}');
-                if (widget.mainAppFocusNode?.hasFocus == true) {
-                  print('✅ [DocumentEditor] Foco devolvido com sucesso ao mainAppFocusNode');
-                } else {
-                  print('⚠️ [DocumentEditor] mainAppFocusNode ainda não tem foco');
-                }
-              }
-            });
-          } else if (widget.mainAppFocusNode == null) {
-            print('⚠️ [DocumentEditor] mainAppFocusNode não fornecido, usando apenas unfocus');
-          } else {
-            print('✅ [DocumentEditor] mainAppFocusNode já tem foco');
-          }
-        }
-      });
-    } else {
-      print('⏸️ [DocumentEditor] Ainda há campos focados, não devolvendo foco');
-    }
+    _newFieldKeyFocusNode = FocusNode();
+    _newFieldValueFocusNode = FocusNode();
   }
 
   @override
@@ -147,6 +50,10 @@ class _DocumentEditorState extends State<DocumentEditor> {
     _newFieldValueController.dispose();
     _newFieldKeyFocusNode.dispose();
     _newFieldValueFocusNode.dispose();
+    for (final controller in _descriptionControllers.values) {
+      controller.dispose();
+    }
+    _descriptionControllers.clear();
     super.dispose();
   }
 
@@ -160,60 +67,47 @@ class _DocumentEditorState extends State<DocumentEditor> {
       focusNode.dispose();
     }
     _focusNodes.clear();
+    
+    for (final controller in _descriptionControllers.values) {
+      controller.dispose();
+    }
+    _descriptionControllers.clear();
+    
+    _fieldTypes.clear();
   }
 
   @override
   void didUpdateWidget(DocumentEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // Atualiza se o node mudou (ID diferente) ou se os campos mudaram
     final oldNode = oldWidget.selectedNode;
     final newNode = widget.selectedNode;
     
     if (oldNode?.id != newNode?.id) {
-      // Node diferente, atualiza controllers
       _updateControllers();
     } else if (oldNode != null && newNode != null) {
-      // Mesmo node, mas pode ter mudado os campos (undo/redo)
       if (_fieldsChanged(oldNode.fields, newNode.fields)) {
         _updateControllers();
       }
     } else if (oldNode == null && newNode != null) {
-      // Node foi selecionado
       _updateControllers();
     } else if (oldNode != null && newNode == null) {
-      // Node foi deselecionado
       _disposeControllers();
-      _fieldTypes.clear();
     }
   }
 
-  /// Verifica se os campos mudaram entre dois maps
   bool _fieldsChanged(Map<String, dynamic> oldFields, Map<String, dynamic> newFields) {
-    // Se o número de campos mudou, claramente mudou
-    if (oldFields.length != newFields.length) {
-      return true;
-    }
-    
-    // Verifica se algum campo foi removido ou adicionado
-    if (oldFields.keys.toSet() != newFields.keys.toSet()) {
-      return true;
-    }
-    
-    // Verifica se algum valor mudou
+    if (oldFields.length != newFields.length) return true;
+    if (oldFields.keys.toSet() != newFields.keys.toSet()) return true;
     for (final key in oldFields.keys) {
-      if (oldFields[key] != newFields[key]) {
-        return true;
-      }
+      if (oldFields[key] != newFields[key]) return true;
     }
-    
     return false;
   }
 
   void _updateControllers() {
     if (widget.selectedNode == null) {
       _disposeControllers();
-      _fieldTypes.clear();
       return;
     }
 
@@ -225,10 +119,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
     for (final key in keysToRemove) {
       _controllers[key]?.dispose();
       _controllers.remove(key);
-      _focusNodes[key]?.removeListener(() {});
       _focusNodes[key]?.dispose();
       _focusNodes.remove(key);
       _fieldTypes.remove(key);
+      _descriptionControllers[key]?.dispose();
+      _descriptionControllers.remove(key);
     }
     
     // Atualiza ou cria controllers para campos existentes
@@ -236,36 +131,32 @@ class _DocumentEditorState extends State<DocumentEditor> {
       final isEditing = _focusNodes[key]?.hasFocus ?? false;
       
       if (_controllers.containsKey(key)) {
-        // Campo já existe
         if (!isEditing) {
-          // Só atualiza se não está sendo editado
           final currentValue = _valueToString(value);
           if (_controllers[key]!.text != currentValue) {
             _controllers[key]!.text = currentValue;
           }
+          if (_descriptionControllers.containsKey(key) && _descriptionControllers[key]!.text != currentValue) {
+            _descriptionControllers[key]!.text = currentValue;
+          }
           _fieldTypes[key] = _getValueType(value);
         }
-        // Se está editando, mantém o valor atual do controller
-        // O listener já foi adicionado quando o FocusNode foi criado
       } else {
-        // Novo campo, cria controller e focus node
         _controllers[key] = TextEditingController(text: _valueToString(value));
         _fieldTypes[key] = _getValueType(value);
         _focusNodes[key] = FocusNode();
         
-        // Adiciona listener para salvar quando perder foco e atualizar visual
+        // Se for string longo, cria controller separado para textarea
+        if (_getValueType(value) == 'String' && _valueToString(value).length > 50) {
+          _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
+        }
+        
         _focusNodes[key]!.addListener(() {
           if (mounted) {
             final hasFocus = _focusNodes[key]!.hasFocus;
-            print('🔄 [DocumentEditor] Campo "$key" foco mudou: hasFocus=$hasFocus');
-            
-            setState(() {}); // Atualiza visual quando foco muda
+            setState(() {});
             if (!hasFocus) {
-              // Perdeu foco, confirma a edição
-              print('   Campo "$key" perdeu foco, confirmando edição');
               _confirmFieldEdit(key);
-              // Se nenhum campo está focado, devolve o foco para o widget principal
-              _returnFocusToMain();
             }
           }
         });
@@ -286,12 +177,38 @@ class _DocumentEditorState extends State<DocumentEditor> {
     return 'String';
   }
 
+  IconData _getIconForType(String type) {
+    switch (type) {
+      case 'int':
+      case 'double':
+        return Icons.tag;
+      case 'bool':
+        return Icons.toggle_on;
+      case 'String':
+      default:
+        return Icons.text_fields;
+    }
+  }
+
+  Color _getIconColorForType(String type) {
+    switch (type) {
+      case 'int':
+      case 'double':
+        return AppTheme.neonBlue;
+      case 'bool':
+        return AppTheme.neonCyan;
+      case 'String':
+      default:
+        return AppTheme.textSecondary;
+    }
+  }
+
   dynamic _parseValue(String value, String type) {
     switch (type) {
       case 'int':
-        return int.tryParse(value);
+        return int.tryParse(value) ?? 0;
       case 'double':
-        return double.tryParse(value);
+        return double.tryParse(value) ?? 0.0;
       case 'bool':
         return value.toLowerCase() == 'true';
       case 'String':
@@ -324,29 +241,28 @@ class _DocumentEditorState extends State<DocumentEditor> {
     final value = _parseValue(valueStr, type);
     widget.onFieldAdded(widget.selectedNode!.id, key, value);
 
-    // Limpa campos
     _newFieldKeyController.clear();
     _newFieldValueController.clear();
     setState(() {
       _newFieldType = 'String';
+      _showAddField = false;
     });
 
-    // Atualiza controllers
     _updateControllers();
   }
-
 
   void _confirmFieldEdit(String key) {
     if (widget.selectedNode == null) return;
     
-    final controller = _controllers[key];
+    final controller = _descriptionControllers.containsKey(key) 
+        ? _descriptionControllers[key] 
+        : _controllers[key];
     if (controller == null) return;
     
     final valueStr = controller.text;
     final type = _fieldTypes[key] ?? 'String';
     final value = _parseValue(valueStr, type);
     
-    // Verifica se o valor realmente mudou
     final currentValue = widget.selectedNode!.fields[key];
     if (currentValue != value) {
       widget.onFieldChanged(widget.selectedNode!.id, key, value);
@@ -359,7 +275,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
     widget.onFieldRemoved(widget.selectedNode!.id, key);
     _controllers[key]?.dispose();
     _controllers.remove(key);
+    _focusNodes[key]?.dispose();
+    _focusNodes.remove(key);
     _fieldTypes.remove(key);
+    _descriptionControllers[key]?.dispose();
+    _descriptionControllers.remove(key);
   }
 
   @override
@@ -371,23 +291,14 @@ class _DocumentEditorState extends State<DocumentEditor> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.description_outlined, size: 64, color: AppTheme.textTertiary),
+              Icon(Icons.inventory_2_outlined, size: 48, color: AppTheme.textTertiary),
               const SizedBox(height: 16),
               Text(
                 'Nenhum node selecionado',
                 style: TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   color: AppTheme.textSecondary,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Selecione um node para editar seus campos',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textTertiary,
-                ),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
@@ -398,266 +309,238 @@ class _DocumentEditorState extends State<DocumentEditor> {
     final node = widget.selectedNode!;
     final fields = node.fields;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16.0),
+    return Container(
+      color: AppTheme.surfaceDark,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Cabeçalho com informações do node
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.folder, size: 20, color: AppTheme.neonBlue),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          node.name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'ID: ${node.id}',
+          // Header compacto
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceNeutral,
+              border: Border(
+                bottom: BorderSide(color: AppTheme.borderNeutral, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.inventory_2, size: 16, color: AppTheme.neonBlue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${node.name} (${_getNodeType(node)})',
                     style: TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
                     ),
                   ),
-                ],
-              ),
+                ),
+                IconButton(
+                  icon: Icon(
+                    _showAddField ? Icons.close : Icons.add,
+                    size: 18,
+                    color: AppTheme.textSecondary,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _showAddField = !_showAddField;
+                    });
+                  },
+                  tooltip: _showAddField ? 'Fechar' : 'Adicionar campo',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-
-          // Lista de campos existentes
-          const Text(
-            'Campos',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          if (fields.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Text(
-                'Nenhum campo adicionado',
-                style: TextStyle(color: AppTheme.textSecondary),
-              ),
-            )
-          else
-            ...fields.entries.map((entry) {
-              final key = entry.key;
-              final value = entry.value;
-              
-              // Garante que temos controller e focusNode para este campo
-              if (!_controllers.containsKey(key)) {
-                _controllers[key] = TextEditingController(text: _valueToString(value));
-                _fieldTypes[key] = _getValueType(value);
-                _focusNodes[key] = FocusNode();
-                
-                // Adiciona listener para salvar quando perder foco
-                _focusNodes[key]!.addListener(() {
-                  if (mounted) {
-                    final hasFocus = _focusNodes[key]!.hasFocus;
-                    print('🔄 [DocumentEditor] Campo "$key" (build) foco mudou: hasFocus=$hasFocus');
-                    
-                    if (!hasFocus) {
-                      // Perdeu foco, confirma a edição
-                      print('   Campo "$key" perdeu foco, confirmando edição');
-                      _confirmFieldEdit(key);
-                      // Se nenhum campo está focado, devolve o foco para o widget principal
-                      _returnFocusToMain();
-                    }
-                  }
-                });
-              }
-              
-              final controller = _controllers[key]!;
-              final focusNode = _focusNodes[key]!;
-
-              return Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+          
+          // Lista de propriedades
+          Expanded(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  // Propriedades existentes
+                  if (fields.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        'Nenhum campo adicionado',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ),
+                    )
+                  else
+                    ...fields.entries.map((entry) {
+                      final key = entry.key;
+                      final value = entry.value;
+                      final type = _fieldTypes[key] ?? _getValueType(value);
+                      
+                      if (!_controllers.containsKey(key)) {
+                        _controllers[key] = TextEditingController(text: _valueToString(value));
+                        _fieldTypes[key] = type;
+                        _focusNodes[key] = FocusNode();
+                        
+                        if (type == 'String' && _valueToString(value).length > 50) {
+                          _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
+                        }
+                        
+                        _focusNodes[key]!.addListener(() {
+                          if (mounted) {
+                            setState(() {});
+                            if (!_focusNodes[key]!.hasFocus) {
+                              _confirmFieldEdit(key);
+                            }
+                          }
+                        });
+                      }
+                      
+                      final controller = _descriptionControllers.containsKey(key)
+                          ? _descriptionControllers[key]!
+                          : _controllers[key]!;
+                      final focusNode = _focusNodes[key]!;
+                      final isString = type == 'String';
+                      final isLongString = _descriptionControllers.containsKey(key);
+                      final isBool = type == 'bool';
+                      
+                      return _buildPropertyRow(
+                        key: key,
+                        type: type,
+                        value: value,
+                        controller: controller,
+                        focusNode: focusNode,
+                        isString: isString,
+                        isLongString: isLongString,
+                        isBool: isBool,
+                      );
+                    }),
+                  
+                  // Seção para adicionar novo campo
+                  if (_showAddField)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceVariantDark.withOpacity(0.5),
+                        border: Border(
+                          top: BorderSide(color: AppTheme.borderNeutral, width: 1),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              key,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                          Text(
+                            'Adicionar Campo',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textSecondary,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          
+                          // Nome do campo
+                          _buildCompactTextField(
+                            controller: _newFieldKeyController,
+                            focusNode: _newFieldKeyFocusNode,
+                            label: 'Nome',
+                            hintText: 'Ex: description, cost',
+                            icon: Icons.label_outline,
+                          ),
+                          const SizedBox(height: 6),
+                          
+                          // Tipo e valor
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  value: _newFieldType,
+                                  decoration: InputDecoration(
+                                    labelText: 'Tipo',
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    border: OutlineInputBorder(
+                                      borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                    ),
+                                    filled: true,
+                                    fillColor: AppTheme.surfaceVariantDark,
+                                  ),
+                                  style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                                  items: const [
+                                    DropdownMenuItem(value: 'String', child: Text('String')),
+                                    DropdownMenuItem(value: 'int', child: Text('int')),
+                                    DropdownMenuItem(value: 'double', child: Text('double')),
+                                    DropdownMenuItem(value: 'bool', child: Text('bool')),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _newFieldType = value ?? 'String';
+                                      if (value == 'bool') {
+                                        _newFieldValueController.text = 'false';
+                                      } else {
+                                        _newFieldValueController.clear();
+                                      }
+                                    });
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                flex: 3,
+                                child: _newFieldType == 'bool'
+                                    ? Row(
+                                        children: [
+                                          Checkbox(
+                                            value: _newFieldValueController.text.toLowerCase() == 'true',
+                                            onChanged: (bool? newValue) {
+                                              setState(() {
+                                                _newFieldValueController.text = newValue == true ? 'true' : 'false';
+                                              });
+                                            },
+                                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          ),
+                                          Expanded(
+                                            child: Text(
+                                              _newFieldValueController.text.toLowerCase() == 'true' ? 'Verdadeiro' : 'Falso',
+                                              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : _buildCompactTextField(
+                                        controller: _newFieldValueController,
+                                        focusNode: _newFieldValueFocusNode,
+                                        label: 'Valor',
+                                        hintText: _getHintForType(_newFieldType),
+                                      ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          
+                          // Botão adicionar
+                          SizedBox(
+                            width: double.infinity,
+                            child: TextButton.icon(
+                              onPressed: _addNewField,
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Adicionar'),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
+                                foregroundColor: AppTheme.neonBlue,
                               ),
                             ),
                           ),
-                          Chip(
-                            label: Text(
-                              _fieldTypes[key] ?? 'String',
-                              style: const TextStyle(fontSize: 11),
-                            ),
-                            visualDensity: VisualDensity.compact,
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.delete, size: 20, color: AppTheme.error),
-                            tooltip: 'Remover campo',
-                            onPressed: () => _removeField(key),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                          ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      // Se for bool, mostra checkbox; senão mostra TextField
-                      _fieldTypes[key] == 'bool'
-                          ? Row(
-                              children: [
-                                Checkbox(
-                                  value: value is bool ? value : false,
-                                  onChanged: (bool? newValue) {
-                                    if (newValue != null) {
-                                      widget.onFieldChanged(widget.selectedNode!.id, key, newValue);
-                                    }
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    value is bool && value ? 'Verdadeiro' : 'Falso',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: AppTheme.textSecondary,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            )
-                          : _buildEditableTextField(
-                              controller: controller,
-                              focusNode: focusNode,
-                              labelText: 'Valor',
-                              onSubmitted: (_) => _confirmFieldEdit(key),
-                              onEditingComplete: () => _confirmFieldEdit(key),
-                            ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-
-          const SizedBox(height: 24),
-
-          // Seção para adicionar novo campo
-          const Divider(),
-          const SizedBox(height: 8),
-          const Text(
-            'Adicionar Novo Campo',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Nome do campo
-          TextField(
-            controller: _newFieldKeyController,
-            focusNode: _newFieldKeyFocusNode,
-            decoration: const InputDecoration(
-              labelText: 'Nome do campo',
-              hintText: 'Ex: descrição, autor, data',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            textCapitalization: TextCapitalization.none,
-          ),
-          const SizedBox(height: 12),
-
-          // Tipo do campo
-          DropdownButtonFormField<String>(
-            value: _newFieldType,
-            decoration: const InputDecoration(
-              labelText: 'Tipo',
-              border: OutlineInputBorder(),
-              isDense: true,
-            ),
-            items: const [
-              DropdownMenuItem(value: 'String', child: Text('Texto (String)')),
-              DropdownMenuItem(value: 'int', child: Text('Número Inteiro (int)')),
-              DropdownMenuItem(value: 'double', child: Text('Número Decimal (double)')),
-              DropdownMenuItem(value: 'bool', child: Text('Verdadeiro/Falso (bool)')),
-            ],
-            onChanged: (value) {
-              setState(() {
-                _newFieldType = value ?? 'String';
-                // Limpa o valor quando muda o tipo
-                if (value == 'bool') {
-                  _newFieldValueController.text = 'false';
-                } else {
-                  _newFieldValueController.clear();
-                }
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-
-          // Valor inicial - se for bool, mostra checkbox; senão mostra TextField
-          _newFieldType == 'bool'
-              ? Row(
-                  children: [
-                    Checkbox(
-                      value: _newFieldValueController.text.toLowerCase() == 'true',
-                      onChanged: (bool? newValue) {
-                        setState(() {
-                          _newFieldValueController.text = newValue == true ? 'true' : 'false';
-                        });
-                      },
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _newFieldValueController.text.toLowerCase() == 'true' ? 'Verdadeiro' : 'Falso',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                          fontStyle: FontStyle.italic,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : _buildEditableTextField(
-                  controller: _newFieldValueController,
-                  focusNode: _newFieldValueFocusNode,
-                  labelText: 'Valor inicial',
-                  hintText: _getHintForType(_newFieldType),
-                ),
-          const SizedBox(height: 12),
-
-          // Botão para adicionar
-          FilledButton.icon(
-            onPressed: _addNewField,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Adicionar Campo'),
-            style: FilledButton.styleFrom(
-              minimumSize: const Size(double.infinity, 40),
+                ],
+              ),
             ),
           ),
         ],
@@ -665,66 +548,198 @@ class _DocumentEditorState extends State<DocumentEditor> {
     );
   }
 
-  /// Constrói um TextField com visual destacado quando em edição
-  Widget _buildEditableTextField({
+  String _getNodeType(Node node) => 'Node';
+
+  Widget _buildPropertyRow({
+    required String key,
+    required String type,
+    required dynamic value,
     required TextEditingController controller,
     required FocusNode focusNode,
-    required String labelText,
-    String? hintText,
-    VoidCallback? onEditingComplete,
-    ValueChanged<String>? onSubmitted,
+    required bool isString,
+    required bool isLongString,
+    required bool isBool,
   }) {
-    return Builder(
-      builder: (context) {
-        final isEditing = focusNode.hasFocus;
-        return TextField(
-          controller: controller,
-          focusNode: focusNode,
-          decoration: InputDecoration(
-            labelText: labelText,
-            hintText: hintText,
-            border: OutlineInputBorder(
-              borderSide: BorderSide(
-                color: isEditing 
-                    ? Theme.of(context).colorScheme.primary 
-                    : Colors.grey,
-                width: isEditing ? 2 : 1,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppTheme.borderNeutral.withOpacity(0.3), width: 0.5),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: isLongString ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+        children: [
+          // Label à esquerda
+          SizedBox(
+            width: 100,
+            child: Text(
+              key,
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderSide: BorderSide(
-                color: isEditing 
-                    ? Theme.of(context).colorScheme.primary 
-                    : Colors.grey,
-                width: isEditing ? 2 : 1,
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderSide: BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-                width: 2,
-              ),
-            ),
-            filled: isEditing,
-            fillColor: isEditing 
-                ? Theme.of(context).colorScheme.primary.withOpacity(0.1)
-                : null,
-            isDense: true,
           ),
-          style: TextStyle(
-            fontWeight: isEditing ? FontWeight.w500 : FontWeight.normal,
+          
+          const SizedBox(width: 8),
+          
+          // Valor à direita
+          Expanded(
+            child: isBool
+                ? Row(
+                    children: [
+                      Checkbox(
+                        value: value is bool ? value : false,
+                        onChanged: (bool? newValue) {
+                          if (newValue != null) {
+                            widget.onFieldChanged(widget.selectedNode!.id, key, newValue);
+                          }
+                        },
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          value is bool && value ? 'Verdadeiro' : 'Falso',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+                        onPressed: () => _removeField(key),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                        tooltip: 'Remover',
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      // Ícone do tipo
+                      Icon(
+                        _getIconForType(type),
+                        size: 14,
+                        color: _getIconColorForType(type),
+                      ),
+                      const SizedBox(width: 6),
+                      
+                      // Campo de texto
+                      Expanded(
+                        child: isLongString
+                            ? TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                maxLines: 3,
+                                minLines: 2,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textPrimary,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Digite o texto...',
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                  border: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                  ),
+                                  filled: true,
+                                  fillColor: focusNode.hasFocus
+                                      ? AppTheme.neonBlue.withOpacity(0.1)
+                                      : AppTheme.surfaceVariantDark,
+                                ),
+                              )
+                            : TextField(
+                                controller: controller,
+                                focusNode: focusNode,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textPrimary,
+                                ),
+                                decoration: InputDecoration(
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  border: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                  ),
+                                  filled: true,
+                                  fillColor: focusNode.hasFocus
+                                      ? AppTheme.neonBlue.withOpacity(0.1)
+                                      : AppTheme.surfaceVariantDark,
+                                ),
+                              ),
+                      ),
+                      
+                      // Botão remover
+                      IconButton(
+                        icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
+                        onPressed: () => _removeField(key),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                        tooltip: 'Remover',
+                      ),
+                    ],
+                  ),
           ),
-          onSubmitted: onSubmitted,
-          onEditingComplete: onEditingComplete,
-        );
-      },
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCompactTextField({
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required String label,
+    String? hintText,
+    IconData? icon,
+  }) {
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hintText,
+        prefixIcon: icon != null ? Icon(icon, size: 16, color: AppTheme.textTertiary) : null,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        border: OutlineInputBorder(
+          borderSide: BorderSide(color: AppTheme.borderNeutral),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: AppTheme.borderNeutral),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+        ),
+        filled: true,
+        fillColor: focusNode.hasFocus
+            ? AppTheme.neonBlue.withOpacity(0.1)
+            : AppTheme.surfaceVariantDark,
+      ),
     );
   }
 
   String _getHintForType(String type) {
     switch (type) {
       case 'int':
-        return 'Ex: 42';
+        return 'Ex: 100';
       case 'double':
         return 'Ex: 3.14';
       case 'bool':
@@ -735,4 +750,3 @@ class _DocumentEditorState extends State<DocumentEditor> {
     }
   }
 }
-
