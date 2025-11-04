@@ -273,9 +273,29 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _handleAddNodeShortcut() {
-    // Este método é chamado quando 'n' é pressionado globalmente
-    // Cria um novo node filho do node selecionado
-    if (_selectedNodeId == null || _isEditing) {
+    // Este método é chamado quando Control+N é pressionado globalmente
+    // Cria um novo node/prompt filho do node selecionado
+    if (_isEditing) {
+      return;
+    }
+
+    // Verifica se há um prompt selecionado
+    if (_selectedPromptNodeId != null) {
+      final parentPromptNode = _promptsRootNode.findById(_selectedPromptNodeId!);
+      if (parentPromptNode != null) {
+        // Gera um ID único para o novo prompt
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final newPromptId = 'new_prompt_$timestamp';
+        final newPromptName = 'Novo Prompt';
+        
+        // Cria o novo prompt
+        _handlePromptNodeAdded(_selectedPromptNodeId!, newPromptId, newPromptName);
+        return;
+      }
+    }
+
+    // Verifica se há um node do projeto selecionado
+    if (_selectedNodeId == null) {
       return;
     }
 
@@ -295,8 +315,51 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _handleDeleteNodeShortcut() {
     // Este método é chamado quando Delete/Backspace é pressionado globalmente
-    // Deleta o node selecionado (com confirmação)
-    if (_selectedNodeId == null || _isEditing) {
+    // Deleta o node/prompt selecionado (com confirmação)
+    if (_isEditing) {
+      return;
+    }
+
+    // Verifica se há um prompt selecionado
+    if (_selectedPromptNodeId != null) {
+      final promptToDelete = _promptsRootNode.findById(_selectedPromptNodeId!);
+      if (promptToDelete != null) {
+        // Não permite deletar o root de prompts
+        if (_selectedPromptNodeId == _promptsRootNode.id) {
+          return;
+        }
+
+        // Conta quantos descendentes o prompt tem
+        final descendantCount = promptToDelete.countAllDescendants();
+        
+        // Formata a mensagem de confirmação
+        String message;
+        if (descendantCount == 0) {
+          message = 'Você quer deletar o prompt "${promptToDelete.name}"?';
+        } else {
+          final childText = descendantCount == 1 ? 'item filho' : 'itens filhos';
+          message = 'Você quer deletar o prompt "${promptToDelete.name}"? Irá deletar também $descendantCount $childText.';
+        }
+
+        // Mostra dialog de confirmação
+        ConfirmationDialog.show(
+          context: context,
+          title: 'Confirmar deleção',
+          message: message,
+          confirmText: 'Deletar',
+          cancelText: 'Cancelar',
+          isDestructive: true,
+          onConfirm: () {
+            // Usuário confirmou, deleta o prompt
+            _handlePromptNodeDeleted(_selectedPromptNodeId!);
+          },
+        );
+      }
+      return;
+    }
+
+    // Verifica se há um node do projeto selecionado
+    if (_selectedNodeId == null) {
       return;
     }
 
@@ -698,12 +761,43 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _handlePromptNodeAdded(String parentNodeId, String newNodeId, String newNodeName) {
     setState(() {
-      _promptsRootNode = _addNodeToParent(_promptsRootNode, parentNodeId, newNodeId, newNodeName);
+      // Cria o novo prompt com os campos obrigatórios já preenchidos
+      final newNode = Node(
+        id: newNodeId,
+        name: newNodeName,
+        fields: {
+          'prompt': '', // Campo obrigatório - prompt vazio inicialmente
+          'order': 'start', // Campo obrigatório - padrão 'start'
+          'index': 0, // Campo obrigatório - índice padrão 0
+        },
+        fieldTypes: {
+          'prompt': 'text',
+          'order': 'String',
+          'index': 'number',
+        },
+      );
+      
+      // Adiciona o node à árvore de prompts
+      _promptsRootNode = _addPromptNodeToParent(_promptsRootNode, parentNodeId, newNode);
     });
     // Salva automaticamente se tiver projeto aberto
     if (_currentProjectPath != null) {
       PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
     }
+  }
+
+  /// Adiciona um node de prompt a um parent na árvore de prompts
+  Node _addPromptNodeToParent(Node root, String parentNodeId, Node newNode) {
+    if (root.id == parentNodeId) {
+      final newChildren = List<Node>.from(root.children)..add(newNode);
+      return root.copyWith(children: newChildren);
+    }
+    
+    final updatedChildren = root.children
+        .map((child) => _addPromptNodeToParent(child, parentNodeId, newNode))
+        .toList();
+    
+    return root.copyWith(children: updatedChildren);
   }
 
   void _handlePromptNodeDeleted(String deletedNodeId) {
@@ -1590,14 +1684,15 @@ class _MyHomePageState extends State<MyHomePage> {
               print('⌨️ [Main] CTRL+N PRESSIONADO GLOBALMENTE');
               print('   _isEditing: $_isEditing');
               print('   _selectedNodeId: $_selectedNodeId');
+              print('   _selectedPromptNodeId: $_selectedPromptNodeId');
               print('   _showWindow: $_showWindow');
               
-              // Verifica condições: não pode estar editando e precisa ter um node selecionado
-              if (!_isEditing && _selectedNodeId != null && _showWindow) {
-                print('✅ [Main] Condições OK, adicionando node');
+              // Verifica condições: não pode estar editando e precisa ter um node ou prompt selecionado
+              if (!_isEditing && _showWindow && (_selectedNodeId != null || _selectedPromptNodeId != null)) {
+                print('✅ [Main] Condições OK, adicionando node/prompt');
                 _handleAddNodeShortcut();
               } else {
-                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _showWindow=$_showWindow');
+                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _selectedPromptNodeId=$_selectedPromptNodeId, _showWindow=$_showWindow');
               }
               return null;
             },
@@ -1608,6 +1703,7 @@ class _MyHomePageState extends State<MyHomePage> {
               print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
               print('   _isEditing: $_isEditing');
               print('   _selectedNodeId: $_selectedNodeId');
+              print('   _selectedPromptNodeId: $_selectedPromptNodeId');
               print('   _showWindow: $_showWindow');
               developer.log('Main: Delete pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing');
               
@@ -1617,12 +1713,12 @@ class _MyHomePageState extends State<MyHomePage> {
               print('   focusedChild: ${focusedChild?.runtimeType}');
               developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
               
-              // Só deleta se não estiver editando e houver um node selecionado
-              if (!_isEditing && _selectedNodeId != null && _showWindow) {
-                print('✅ [Main] Condições OK, deletando node');
+              // Só deleta se não estiver editando e houver um node ou prompt selecionado
+              if (!_isEditing && _showWindow && (_selectedNodeId != null || _selectedPromptNodeId != null)) {
+                print('✅ [Main] Condições OK, deletando node/prompt');
                 _handleDeleteNodeShortcut();
               } else {
-                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _showWindow=$_showWindow');
+                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _selectedPromptNodeId=$_selectedPromptNodeId, _showWindow=$_showWindow');
               }
               return null;
             },
