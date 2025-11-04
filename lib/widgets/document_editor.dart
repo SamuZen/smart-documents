@@ -146,8 +146,9 @@ class _DocumentEditorState extends State<DocumentEditor> {
         _fieldTypes[key] = _getValueType(value);
         _focusNodes[key] = FocusNode();
         
-        // Se for string longo, cria controller separado para textarea
-        if (_getValueType(value) == 'String' && _valueToString(value).length > 50) {
+        // Se for tipo "text" ou string longo (>50 chars), cria controller separado para textarea
+        final valueType = _getValueType(value);
+        if (valueType == 'text' || (valueType == 'String' && _valueToString(value).length > 50)) {
           _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
         }
         
@@ -182,6 +183,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return Icons.tag;
       case 'bool':
         return Icons.toggle_on;
+      case 'text':
+        return Icons.article;
       case 'String':
       default:
         return Icons.text_fields;
@@ -193,6 +196,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
       case 'number':
         return AppTheme.neonBlue;
       case 'bool':
+        return AppTheme.neonCyan;
+      case 'text':
         return AppTheme.neonCyan;
       case 'String':
       default:
@@ -215,6 +220,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return 0;
       case 'bool':
         return value.toLowerCase() == 'true';
+      case 'text':
       case 'String':
       default:
         return value;
@@ -388,7 +394,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         _fieldTypes[key] = type;
                         _focusNodes[key] = FocusNode();
                         
-                        if (type == 'String' && _valueToString(value).length > 50) {
+                        // Se for tipo "text" ou string longo (>50 chars), cria controller separado para textarea
+                        if (type == 'text' || (type == 'String' && _valueToString(value).length > 50)) {
                           _descriptionControllers[key] = TextEditingController(text: _valueToString(value));
                         }
                         
@@ -407,7 +414,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
                           : _controllers[key]!;
                       final focusNode = _focusNodes[key]!;
                       final isString = type == 'String';
-                      final isLongString = _descriptionControllers.containsKey(key);
+                      final isText = type == 'text';
+                      final isLongString = _descriptionControllers.containsKey(key) || isText;
                       final isBool = type == 'bool';
                       
                       return _buildPropertyRow(
@@ -417,6 +425,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                         controller: controller,
                         focusNode: focusNode,
                         isString: isString,
+                        isText: isText,
                         isLongString: isLongString,
                         isBool: isBool,
                       );
@@ -476,6 +485,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                   style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
                                     items: const [
                                       DropdownMenuItem(value: 'String', child: Text('String')),
+                                      DropdownMenuItem(value: 'text', child: Text('text')),
                                       DropdownMenuItem(value: 'number', child: Text('number')),
                                       DropdownMenuItem(value: 'bool', child: Text('bool')),
                                     ],
@@ -514,13 +524,39 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                           ),
                                         ],
                                       )
-                                    : _buildCompactTextField(
-                                        controller: _newFieldValueController,
-                                        focusNode: _newFieldValueFocusNode,
-                                        label: 'Valor',
-                                        hintText: _getHintForType(_newFieldType),
-                                        fieldType: _newFieldType,
-                                      ),
+                                    : _newFieldType == 'text'
+                                        ? TextField(
+                                            controller: _newFieldValueController,
+                                            focusNode: _newFieldValueFocusNode,
+                                            maxLines: null,
+                                            minLines: 4,
+                                            style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                                            decoration: InputDecoration(
+                                              hintText: 'Digite o texto longo...',
+                                              isDense: true,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                              border: OutlineInputBorder(
+                                                borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderSide: BorderSide(color: AppTheme.borderNeutral),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                                              ),
+                                              filled: true,
+                                              fillColor: _newFieldValueFocusNode.hasFocus
+                                                  ? AppTheme.neonBlue.withOpacity(0.1)
+                                                  : AppTheme.surfaceVariantDark,
+                                            ),
+                                          )
+                                        : _buildCompactTextField(
+                                            controller: _newFieldValueController,
+                                            focusNode: _newFieldValueFocusNode,
+                                            label: 'Valor',
+                                            hintText: _getHintForType(_newFieldType),
+                                            fieldType: _newFieldType,
+                                          ),
                               ),
                             ],
                           ),
@@ -561,6 +597,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
     required TextEditingController controller,
     required FocusNode focusNode,
     required bool isString,
+    required bool isText,
     required bool isLongString,
     required bool isBool,
   }) {
@@ -638,8 +675,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
                             ? TextField(
                                 controller: controller,
                                 focusNode: focusNode,
-                                maxLines: 3,
-                                minLines: 2,
+                                maxLines: isText ? null : 3, // text pode expandir infinitamente
+                                minLines: isText ? 4 : 2,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppTheme.textPrimary,
@@ -749,6 +786,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
         return 'Ex: 100 ou 3.14';
       case 'bool':
         return 'true ou false';
+      case 'text':
+        return 'Texto longo (múltiplas linhas)';
       case 'String':
       default:
         return 'Ex: Meu texto';
