@@ -21,9 +21,11 @@ class AppMenuBar extends StatelessWidget {
   final VoidCallback? onToggleNavigation;
   final VoidCallback? onToggleActions;
   final VoidCallback? onToggleDocumentEditor;
+  final VoidCallback? onToggleComposer;
   final bool showNavigation;
   final bool showActions;
   final bool showDocumentEditor;
+  final bool showComposer;
 
   const AppMenuBar({
     super.key,
@@ -43,9 +45,11 @@ class AppMenuBar extends StatelessWidget {
     this.onToggleNavigation,
     this.onToggleActions,
     this.onToggleDocumentEditor,
+    this.onToggleComposer,
     this.showNavigation = true,
     this.showActions = true,
     this.showDocumentEditor = true,
+    this.showComposer = false,
   });
 
   @override
@@ -144,6 +148,12 @@ class AppMenuBar extends StatelessWidget {
                 icon: showDocumentEditor ? Icons.check_box : Icons.check_box_outline_blank,
                 label: 'Editor de Documento',
                 onPressed: onToggleDocumentEditor,
+              ),
+              const _MenuDivider(),
+              _MenuItem(
+                icon: showComposer ? Icons.check_box : Icons.check_box_outline_blank,
+                label: 'Open Composer window',
+                onPressed: onToggleComposer,
               ),
             ],
           ),
