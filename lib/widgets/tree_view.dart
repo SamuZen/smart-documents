@@ -143,11 +143,6 @@ class _TreeViewState extends State<TreeView> {
       
       // Limpa o callback de confirmação do node que estava editando
       _confirmCallbacks.remove(_editingNodeId);
-      
-      // Garante que o foco volte para o TreeView
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _treeFocusNode.requestFocus();
-      });
     }
     
     final previousEditingNodeId = _editingNodeId;
@@ -156,6 +151,15 @@ class _TreeViewState extends State<TreeView> {
       // Cancela modo de edição ao selecionar outro nó
       if (_editingNodeId != null && _editingNodeId != nodeId) {
         _editingNodeId = null;
+      }
+    });
+    
+    // IMPORTANTE: Sempre restaura o foco para o TreeView quando um node é selecionado
+    // Isso garante que F2 funcione mesmo após clicar em outros campos
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_treeFocusNode.hasFocus) {
+        print('🔍 [TreeView] Restaurando foco do TreeView após selecionar node');
+        _treeFocusNode.requestFocus();
       }
     });
     
