@@ -289,7 +289,7 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
                                             borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Text(
-                                            '${execution.tokensUsed} tokens',
+                                            _formatTokens(execution),
                                             style: TextStyle(
                                               fontSize: 11,
                                               color: AppTheme.neonBlue,
@@ -377,6 +377,22 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
   String _truncatePrompt(String prompt) {
     if (prompt.length <= 100) return prompt;
     return '${prompt.substring(0, 100)}...';
+  }
+
+  String _formatTokens(LLMExecutionHistory execution) {
+    final total = execution.tokensUsed ?? 0;
+    final promptTokens = execution.promptTokens;
+    final completionTokens = execution.completionTokens;
+
+    if (promptTokens != null && completionTokens != null) {
+      return '$total (in - $promptTokens / out - $completionTokens)';
+    } else if (promptTokens != null) {
+      return '$total (in - $promptTokens)';
+    } else if (completionTokens != null) {
+      return '$total (out - $completionTokens)';
+    } else {
+      return '$total tokens';
+    }
   }
 }
 

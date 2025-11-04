@@ -68,6 +68,12 @@ class LLMExecutionHistory {
   /// Retorna tokens usados (se disponível)
   int? get tokensUsed => metadata['tokens_used'] as int?;
 
+  /// Retorna tokens de input/prompt (se disponível)
+  int? get promptTokens => metadata['prompt_tokens'] as int?;
+
+  /// Retorna tokens de output/completion (se disponível)
+  int? get completionTokens => metadata['completion_tokens'] as int?;
+
   /// Retorna tempo de resposta em milissegundos (se disponível)
   int? get responseTimeMs => metadata['response_time_ms'] as int?;
 

@@ -141,7 +141,7 @@ class _LLMResultDialogState extends State<LLMResultDialog> {
                               if (widget.history.tokensUsed != null)
                                 _buildMetadataItem(
                                   'Tokens',
-                                  widget.history.tokensUsed.toString(),
+                                  _formatTokens(widget.history),
                                 ),
                               if (widget.history.responseTimeMs != null)
                                 _buildMetadataItem(
@@ -316,6 +316,22 @@ class _LLMResultDialogState extends State<LLMResultDialog> {
         '${dateTime.year} '
         '${dateTime.hour.toString().padLeft(2, '0')}:'
         '${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  String _formatTokens(LLMExecutionHistory history) {
+    final total = history.tokensUsed ?? 0;
+    final promptTokens = history.promptTokens;
+    final completionTokens = history.completionTokens;
+
+    if (promptTokens != null && completionTokens != null) {
+      return '$total (in - $promptTokens / out - $completionTokens)';
+    } else if (promptTokens != null) {
+      return '$total (in - $promptTokens)';
+    } else if (completionTokens != null) {
+      return '$total (out - $completionTokens)';
+    } else {
+      return total.toString();
+    }
   }
 }
 
