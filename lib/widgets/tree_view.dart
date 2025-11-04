@@ -287,6 +287,9 @@ class _TreeViewState extends State<TreeView> {
     print('   _editingNodeId antes: $_editingNodeId');
     developer.log('TreeView: _handleCancelEditing chamado. _editingNodeId: $_editingNodeId');
     
+    final wasEditing = _editingNodeId != null;
+    final nodeId = _editingNodeId;
+    
     // Limpa o callback de confirmação
     if (_editingNodeId != null) {
       _confirmCallbacks.remove(_editingNodeId);
@@ -297,6 +300,12 @@ class _TreeViewState extends State<TreeView> {
       _editingNodeId = null;
     });
     print('   _editingNodeId após setState: $_editingNodeId');
+    
+    // IMPORTANTE: Notifica mudança de estado de edição para main.dart resetar _isEditing
+    if (wasEditing && widget.onEditingStateChanged != null) {
+      print('   📢 Notificando onEditingStateChanged(false, $nodeId)');
+      widget.onEditingStateChanged!(false, nodeId);
+    }
     
     // Garante que o foco volte para o TreeView para capturar atalhos de teclado
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -456,6 +465,7 @@ class _TreeViewState extends State<TreeView> {
     }
 
     // Remove o node e limpa estados relacionados
+    final wasEditingDeletedNode = _editingNodeId == deletedNodeId;
     setState(() {
       _rootNode = removeNodeRecursive(_rootNode);
       // Se o node deletado estava expandido, remove do set
@@ -467,6 +477,12 @@ class _TreeViewState extends State<TreeView> {
       // Seleciona o próximo node visível ou limpa seleção
       _selectedNodeId = null;
     });
+    
+    // IMPORTANTE: Se estava editando o node deletado, notifica que a edição foi cancelada
+    if (wasEditingDeletedNode && widget.onEditingStateChanged != null) {
+      print('   📢 Notificando onEditingStateChanged(false, null) - node deletado durante edição');
+      widget.onEditingStateChanged!(false, null);
+    }
 
     // Tenta selecionar o próximo node visível
     WidgetsBinding.instance.addPostFrameCallback((_) {

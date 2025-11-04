@@ -973,11 +973,65 @@ class _MyHomePageState extends State<MyHomePage> {
   // ========== Métodos de Undo/Redo ==========
 
   Future<void> _handleUndo() async {
-    await _commandHistory.undo(_rootNode);
+    final affectedNodeId = await _commandHistory.undo(_rootNode);
+    
+    // Se houver um node afetado, seleciona e foca nele
+    if (affectedNodeId != null) {
+      // Aguarda o setState ser processado antes de selecionar
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedNodeId = affectedNodeId;
+          });
+          // Notifica mudança de seleção para atualizar o TreeView
+          _handleSelectionChanged(affectedNodeId);
+          
+          // Garante que o TreeView recebe foco para que F2 funcione
+          if (_showWindow) {
+            // Aguarda mais um frame para garantir que o TreeView foi atualizado
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                // Solicita foco no TreeView (será feito automaticamente quando clicar, mas aqui garantimos)
+                final focusScope = FocusScope.of(context);
+                focusScope.unfocus(); // Remove foco atual
+                // O TreeView vai receber foco automaticamente quando o node for selecionado
+              }
+            });
+          }
+        }
+      });
+    }
   }
 
   Future<void> _handleRedo() async {
-    await _commandHistory.redo(_rootNode);
+    final affectedNodeId = await _commandHistory.redo(_rootNode);
+    
+    // Se houver um node afetado, seleciona e foca nele
+    if (affectedNodeId != null) {
+      // Aguarda o setState ser processado antes de selecionar
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedNodeId = affectedNodeId;
+          });
+          // Notifica mudança de seleção para atualizar o TreeView
+          _handleSelectionChanged(affectedNodeId);
+          
+          // Garante que o TreeView recebe foco para que F2 funcione
+          if (_showWindow) {
+            // Aguarda mais um frame para garantir que o TreeView foi atualizado
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                // Solicita foco no TreeView (será feito automaticamente quando clicar, mas aqui garantimos)
+                final focusScope = FocusScope.of(context);
+                focusScope.unfocus(); // Remove foco atual
+                // O TreeView vai receber foco automaticamente quando o node for selecionado
+              }
+            });
+          }
+        }
+      });
+    }
   }
 
   Future<void> _handleCreateCheckpoint() async {

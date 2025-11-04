@@ -1,4 +1,11 @@
 import '../commands/command.dart';
+import '../commands/add_node_command.dart';
+import '../commands/delete_node_command.dart';
+import '../commands/move_node_command.dart';
+import '../commands/reorder_node_command.dart';
+import '../commands/rename_node_command.dart';
+import '../commands/set_node_field_command.dart';
+import '../commands/remove_node_field_command.dart';
 import '../models/node.dart';
 import 'checkpoint_manager.dart';
 
@@ -47,14 +54,18 @@ class CommandHistory {
   }
 
   /// Desfaz o último comando
-  Future<void> undo(Node currentTree) async {
+  /// Retorna o nodeId do node afetado pelo undo, ou null se não for possível determinar
+  Future<String?> undo(Node currentTree) async {
     if (!canUndo) {
-      return;
+      return null;
     }
 
     try {
       // Remove último comando da pilha undo
       final command = _undoStack.removeLast();
+      
+      // Extrai o nodeId afetado antes de executar o undo
+      final affectedNodeId = _getAffectedNodeId(command);
       
       // Executa undo na árvore
       final updatedTree = _undoCommandOnTree(command, currentTree);
@@ -67,21 +78,49 @@ class CommandHistory {
       
       // Notifica mudanças no histórico
       _notifyHistoryChanged();
+      
+      return affectedNodeId;
     } catch (e) {
       print('❌ Erro ao desfazer comando: $e');
       rethrow;
     }
   }
+  
+  /// Extrai o nodeId afetado por um comando
+  String? _getAffectedNodeId(Command command) {
+    if (command is RenameNodeCommand) {
+      return command.nodeId;
+    } else if (command is AddNodeCommand) {
+      // No undo de AddNode, o node é removido, então o nodeId é newNodeId
+      return command.newNodeId;
+    } else if (command is DeleteNodeCommand) {
+      // No undo de DeleteNode, o node é restaurado, então o nodeId é deletedNodeId
+      return command.deletedNodeId;
+    } else if (command is MoveNodeCommand) {
+      return command.draggedNodeId;
+    } else if (command is ReorderNodeCommand) {
+      return command.draggedNodeId;
+    } else if (command is SetNodeFieldCommand) {
+      return command.nodeId;
+    } else if (command is RemoveNodeFieldCommand) {
+      return command.nodeId;
+    }
+    return null;
+  }
 
   /// Refaz o último comando desfeito
-  Future<void> redo(Node currentTree) async {
+  /// Retorna o nodeId do node afetado pelo redo, ou null se não for possível determinar
+  Future<String?> redo(Node currentTree) async {
     if (!canRedo) {
-      return;
+      return null;
     }
 
     try {
       // Remove último comando da pilha redo
       final command = _redoStack.removeLast();
+      
+      // Extrai o nodeId afetado antes de executar o redo
+      final affectedNodeId = _getAffectedNodeId(command);
       
       // Reexecuta o comando na árvore
       final updatedTree = _executeCommandOnTree(command, currentTree);
@@ -94,6 +133,8 @@ class CommandHistory {
       
       // Notifica mudanças no histórico
       _notifyHistoryChanged();
+      
+      return affectedNodeId;
     } catch (e) {
       print('❌ Erro ao refazer comando: $e');
       rethrow;
