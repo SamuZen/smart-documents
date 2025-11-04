@@ -1318,13 +1318,7 @@ class _MyHomePageState extends State<MyHomePage> {
                               _showWindow = false;
                             });
                           },
-                          onTap: () {
-                            // Retorna foco ao widget principal quando clica na janela
-                            if (!_mainFocusNode.hasFocus) {
-                              print('🖱️ [Main] Clique na janela Navegação, retornando foco');
-                              _mainFocusNode.requestFocus();
-                            }
-                          },
+                          // Removido onTap para permitir que o TreeView mantenha o foco e capture F2
                           child: TreeView(
                             rootNode: _rootNode,
                             onNodeNameChanged: _updateRootNode,

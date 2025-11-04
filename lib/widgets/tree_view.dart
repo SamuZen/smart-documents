@@ -893,35 +893,64 @@ class _TreeViewState extends State<TreeView> {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: _getShortcuts(),
-      child: Actions(
-        actions: {
-          _F2Intent: CallbackAction<_F2Intent>(
-            onInvoke: (_) {
-              // Quando F2 é pressionado, ativa modo de edição
-              print('⌨️ [TreeView] F2 PRESSIONADO');
-              print('   _selectedNodeId: $_selectedNodeId');
-              print('   _editingNodeId: $_editingNodeId');
-              developer.log('TreeView: F2 pressionado. _selectedNodeId: $_selectedNodeId, _editingNodeId: $_editingNodeId');
-              if (_selectedNodeId != null) {
-                print('✅ [TreeView] ATIVANDO MODO DE EDIÇÃO para node $_selectedNodeId');
-                developer.log('TreeView: Ativando modo de edição para node $_selectedNodeId');
-                setState(() {
-                  _editingNodeId = _selectedNodeId;
-                });
-                // Notifica mudança de estado de edição
-                if (widget.onEditingStateChanged != null) {
-                  widget.onEditingStateChanged!(true, _selectedNodeId);
+    return Focus(
+      focusNode: _treeFocusNode,
+      autofocus: true,
+      canRequestFocus: true,
+      onFocusChange: (hasFocus) {
+        print('🔍 [TreeView] Foco mudou: hasFocus=$hasFocus');
+        developer.log('TreeView: Foco mudou. hasFocus=$hasFocus');
+      },
+      onKeyEvent: (node, event) {
+        print('⌨️ [TreeView] onKeyEvent chamado: ${event.runtimeType}, key: ${event.logicalKey}');
+        // Captura F2 diretamente aqui para garantir que funcione
+        if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.f2) {
+          print('⌨️ [TreeView] F2 PRESSIONADO (via onKeyEvent)');
+          print('   _selectedNodeId: $_selectedNodeId');
+          print('   _editingNodeId: $_editingNodeId');
+          print('   _treeFocusNode.hasFocus: ${_treeFocusNode.hasFocus}');
+          if (_selectedNodeId != null) {
+            print('✅ [TreeView] ATIVANDO MODO DE EDIÇÃO para node $_selectedNodeId');
+            setState(() {
+              _editingNodeId = _selectedNodeId;
+            });
+            if (widget.onEditingStateChanged != null) {
+              widget.onEditingStateChanged!(true, _selectedNodeId);
+            }
+          }
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Shortcuts(
+        shortcuts: _getShortcuts(),
+        child: Actions(
+          actions: {
+            _F2Intent: CallbackAction<_F2Intent>(
+              onInvoke: (_) {
+                // Quando F2 é pressionado, ativa modo de edição
+                print('⌨️ [TreeView] F2 PRESSIONADO (via Shortcuts)');
+                print('   _selectedNodeId: $_selectedNodeId');
+                print('   _editingNodeId: $_editingNodeId');
+                developer.log('TreeView: F2 pressionado. _selectedNodeId: $_selectedNodeId, _editingNodeId: $_editingNodeId');
+                if (_selectedNodeId != null) {
+                  print('✅ [TreeView] ATIVANDO MODO DE EDIÇÃO para node $_selectedNodeId');
+                  developer.log('TreeView: Ativando modo de edição para node $_selectedNodeId');
+                  setState(() {
+                    _editingNodeId = _selectedNodeId;
+                  });
+                  // Notifica mudança de estado de edição
+                  if (widget.onEditingStateChanged != null) {
+                    widget.onEditingStateChanged!(true, _selectedNodeId);
+                  }
+                  print('   _editingNodeId após setState: $_editingNodeId');
+                } else {
+                  print('❌ [TreeView] Nenhum node selecionado, não é possível entrar em modo de edição');
+                  developer.log('TreeView: Nenhum node selecionado, não é possível entrar em modo de edição');
                 }
-                print('   _editingNodeId após setState: $_editingNodeId');
-              } else {
-                print('❌ [TreeView] Nenhum node selecionado, não é possível entrar em modo de edição');
-                developer.log('TreeView: Nenhum node selecionado, não é possível entrar em modo de edição');
-              }
-              return null;
-            },
-          ),
+                return null;
+              },
+            ),
           _CancelEditingIntent: CallbackAction<_CancelEditingIntent>(
             onInvoke: (_) {
               print('⌨️ [TreeView] ESC PRESSIONADO - Cancelando edição');
@@ -1002,9 +1031,15 @@ class _TreeViewState extends State<TreeView> {
           // NOTA: AddChild, DeleteNode, Undo, Redo foram movidos para o nível global (main.dart)
           // para garantir funcionamento consistente em toda a aplicação
         },
-        child: Focus(
-          focusNode: _treeFocusNode,
-          autofocus: true,
+        child: GestureDetector(
+          onTap: () {
+            // Garante que o TreeView recebe foco quando clicado
+            print('🖱️ [TreeView] Clique detectado, solicitando foco');
+            if (!_treeFocusNode.hasFocus) {
+              _treeFocusNode.requestFocus();
+            }
+          },
+          behavior: HitTestBehavior.translucent,
           child: Container(
             decoration: BoxDecoration(
               color: AppTheme.surfaceDark, // Mantém mais escuro para contraste
@@ -1015,6 +1050,7 @@ class _TreeViewState extends State<TreeView> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
