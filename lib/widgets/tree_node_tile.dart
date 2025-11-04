@@ -155,18 +155,16 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
     return Container(
       decoration: BoxDecoration(
         color: widget.isSelected 
-          ? AppTheme.neonBlue.withOpacity(0.15)
+          ? AppTheme.neonBlue.withOpacity(0.08)
           : Colors.transparent,
         borderRadius: BorderRadius.circular(6),
         border: widget.isSelected
           ? Border.all(
-              color: AppTheme.neonBlue.withOpacity(0.5),
+              color: AppTheme.neonBlue.withOpacity(0.25),
               width: 1,
             )
           : null,
-        boxShadow: widget.isSelected
-          ? AppTheme.neonGlowBlue
-          : null,
+        // Removido boxShadow para suavizar o efeito
       ),
       padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
       margin: const EdgeInsets.symmetric(vertical: 2.0),
