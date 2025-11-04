@@ -2,17 +2,22 @@ import 'package:flutter/material.dart';
 import '../models/action_item.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
+import 'llm_execution_dialog.dart';
 
 class ActionsPanel extends StatefulWidget {
   final Node? selectedNode;
   final bool isEditing;
   final bool? isExpanded; // null se não aplicável ou desconhecido
+  final String? Function()? getPromptCallback; // Callback para obter prompt do ComposerWindow
+  final String? projectPath; // Caminho do projeto para salvar histórico
 
   const ActionsPanel({
     super.key,
     this.selectedNode,
     this.isEditing = false,
     this.isExpanded,
+    this.getPromptCallback,
+    this.projectPath,
   });
 
   @override
@@ -25,12 +30,38 @@ class _ActionsPanelState extends State<ActionsPanel> {
     ActionCategory.keyboard,
     ActionCategory.mouse,
     ActionCategory.context,
+    ActionCategory.smart,
   };
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _handleCallPromptComposer() {
+    if (widget.getPromptCallback == null) return;
+    
+    final prompt = widget.getPromptCallback!();
+    if (prompt == null || prompt.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Prompt vazio. Selecione nodes ou prompts no Prompt Composer.',
+            style: TextStyle(color: AppTheme.textPrimary),
+          ),
+          backgroundColor: AppTheme.surfaceVariantDark,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+
+    LLMExecutionDialog.show(
+      context: context,
+      prompt: prompt,
+      projectPath: widget.projectPath,
+    );
   }
 
   List<ActionItem> _generateActions() {
@@ -192,6 +223,21 @@ class _ActionsPanelState extends State<ActionsPanel> {
       ),
     ]);
 
+    // Smart Actions
+    actions.addAll([
+      ActionItem(
+        id: 'call-prompt-composer',
+        name: 'Call Prompt Composer',
+        description: 'Chama uma LLM com o prompt formatado do Prompt Composer',
+        icon: Icons.auto_awesome,
+        category: ActionCategory.smart,
+        available: widget.getPromptCallback != null,
+        condition: widget.getPromptCallback == null
+            ? 'Prompt Composer não disponível'
+            : null,
+      ),
+    ]);
+
     return actions;
   }
 
@@ -222,6 +268,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
         return 'Mouse';
       case ActionCategory.context:
         return 'Contexto';
+      case ActionCategory.smart:
+        return 'Smart Actions';
     }
   }
 
@@ -233,6 +281,8 @@ class _ActionsPanelState extends State<ActionsPanel> {
         return Icons.mouse;
       case ActionCategory.context:
         return Icons.info;
+      case ActionCategory.smart:
+        return Icons.auto_awesome;
     }
   }
 
@@ -368,6 +418,9 @@ class _ActionsPanelState extends State<ActionsPanel> {
                         final action = filteredActions[index];
                         return ListTile(
                           dense: true,
+                          onTap: action.available && action.id == 'call-prompt-composer'
+                              ? () => _handleCallPromptComposer()
+                              : null,
                           leading: Icon(
                             action.icon,
                             size: 20,

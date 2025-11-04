@@ -88,6 +88,9 @@ class _MyHomePageState extends State<MyHomePage> {
   
   // FocusNode principal para capturar atalhos globais
   final FocusNode _mainFocusNode = FocusNode();
+  
+  // GlobalKey para acessar o ComposerWindow
+  final GlobalKey _composerWindowKey = GlobalKey();
 
   @override
   void initState() {
@@ -1902,6 +1905,15 @@ class _MyHomePageState extends State<MyHomePage> {
                             selectedNode: _getSelectedNode(),
                             isEditing: _isEditing,
                             isExpanded: _getSelectedNodeExpansionState(),
+                            getPromptCallback: () {
+                              // Obtém o prompt do ComposerWindow usando GlobalKey
+                              final widget = _composerWindowKey.currentWidget;
+                              if (widget != null && widget is ComposerWindow) {
+                                return ComposerWindow.getFormattedPrompt(_composerWindowKey);
+                              }
+                              return null;
+                            },
+                            projectPath: _currentProjectPath,
                           ),
                         ),
                       // Janela flutuante com DocumentEditor
@@ -1979,7 +1991,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           child: ComposerWindow(
-                            key: ValueKey('composer_${_rootNode.id}_${_promptsRootNode.id}'),
+                            key: _composerWindowKey,
                             rootNode: _rootNode,
                             promptsRootNode: _promptsRootNode,
                             projectPath: _currentProjectPath,

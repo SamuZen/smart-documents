@@ -31,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _controllers['openai'] = TextEditingController();
     _controllers['anthropic'] = TextEditingController();
     _controllers['google'] = TextEditingController();
+    _controllers['grok'] = TextEditingController();
     
     // Adiciona listeners para detectar mudanças
     _controllers.forEach((key, controller) {
@@ -51,11 +52,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final openAIKey = await SettingsService.getOpenAIKey();
       final anthropicKey = await SettingsService.getAnthropicKey();
       final googleKey = await SettingsService.getGoogleKey();
+      final grokKey = await SettingsService.getGrokKey();
 
       setState(() {
         _controllers['openai']!.text = openAIKey ?? '';
         _controllers['anthropic']!.text = anthropicKey ?? '';
         _controllers['google']!.text = googleKey ?? '';
+        _controllers['grok']!.text = grokKey ?? '';
         _hasChanges.clear();
         _isLoading = false;
       });
@@ -83,6 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await SettingsService.setOpenAIKey(_controllers['openai']!.text);
       await SettingsService.setAnthropicKey(_controllers['anthropic']!.text);
       await SettingsService.setGoogleKey(_controllers['google']!.text);
+      await SettingsService.setGrokKey(_controllers['grok']!.text);
 
       setState(() {
         _hasChanges.clear();
@@ -273,6 +277,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               controller: _controllers['google']!,
                               icon: Icons.cloud,
                               description: 'Chave de API do Google (Gemini)',
+                            ),
+                            const SizedBox(height: 16),
+                            // Card Grok
+                            _buildApiKeyCard(
+                              serviceName: 'Grok',
+                              controller: _controllers['grok']!,
+                              icon: Icons.auto_awesome_motion,
+                              description: 'Chave de API do Grok (xAI)',
                             ),
                           ],
                         ),

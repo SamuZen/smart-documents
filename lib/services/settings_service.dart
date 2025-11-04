@@ -7,6 +7,7 @@ class SettingsService {
   static const String _keyApiKeyOpenAI = 'api_key_openai';
   static const String _keyApiKeyAnthropic = 'api_key_anthropic';
   static const String _keyApiKeyGoogle = 'api_key_google';
+  static const String _keyApiKeyGrok = 'api_key_grok';
 
   /// Salva a chave de API da OpenAI
   static Future<void> setOpenAIKey(String? apiKey) async {
@@ -86,6 +87,32 @@ class SettingsService {
     }
   }
 
+  /// Salva a chave de API do Grok
+  static Future<void> setGrokKey(String? apiKey) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (apiKey == null || apiKey.trim().isEmpty) {
+        await prefs.remove(_keyApiKeyGrok);
+      } else {
+        await prefs.setString(_keyApiKeyGrok, apiKey.trim());
+      }
+    } catch (e) {
+      print('Erro ao salvar chave Grok: $e');
+      rethrow;
+    }
+  }
+
+  /// Recupera a chave de API do Grok
+  static Future<String?> getGrokKey() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyApiKeyGrok);
+    } catch (e) {
+      print('Erro ao ler chave Grok: $e');
+      return null;
+    }
+  }
+
   /// Verifica se uma chave de API está salva
   static Future<bool> hasApiKey(String service) async {
     try {
@@ -100,6 +127,9 @@ class SettingsService {
           break;
         case 'google':
           key = _keyApiKeyGoogle;
+          break;
+        case 'grok':
+          key = _keyApiKeyGrok;
           break;
         default:
           return false;

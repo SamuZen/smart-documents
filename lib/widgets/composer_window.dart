@@ -21,6 +21,17 @@ class ComposerWindow extends StatefulWidget {
 
   @override
   State<ComposerWindow> createState() => _ComposerWindowState();
+  
+  /// Helper estático para obter o prompt formatado de um ComposerWindow
+  /// através de uma GlobalKey
+  static String? getFormattedPrompt(GlobalKey? key) {
+    if (key?.currentState == null) return null;
+    final state = key!.currentState;
+    if (state is _ComposerWindowState) {
+      return state.getFormattedPrompt();
+    }
+    return null;
+  }
 }
 
 class _ComposerWindowState extends State<ComposerWindow> {
@@ -222,10 +233,17 @@ class _ComposerWindowState extends State<ComposerWindow> {
     );
   }
 
+  /// Método público para obter o prompt formatado
+  /// Pode ser acessado através de uma GlobalKey
   String _getFormattedPrompt() {
     return _promptService.generatePrompt(
       includeChildren: _includeChildren,
     );
+  }
+  
+  /// Método público para obter o prompt formatado (exposto)
+  String getFormattedPrompt() {
+    return _getFormattedPrompt();
   }
 
   int _getCharacterCount() {
