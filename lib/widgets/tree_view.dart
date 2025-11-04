@@ -945,22 +945,40 @@ class _TreeViewState extends State<TreeView> {
         // A edição será cancelada apenas quando clicar na área vazia da janela
       },
       onKeyEvent: (node, event) {
-        // LOG: Registra eventos de teclado para debug (mas não interfere com setas)
+        // Processa setas diretamente aqui, já que os Shortcuts não estão funcionando
         if (event is KeyDownEvent) {
           final key = event.logicalKey;
           
-          // Para setas, NÃO faz nada aqui - deixa os Shortcuts processarem completamente
-          if (key == LogicalKeyboardKey.arrowUp ||
-              key == LogicalKeyboardKey.arrowDown ||
-              key == LogicalKeyboardKey.arrowLeft ||
-              key == LogicalKeyboardKey.arrowRight) {
-            // Apenas log, não interfere
-            print('⌨️ [TreeView] onKeyEvent - SETA ${key.keyLabel} detectada, deixando Shortcuts processarem');
-            return KeyEventResult.ignored; // Deixa propagar para Shortcuts
+          // Processa setas diretamente
+          if (key == LogicalKeyboardKey.arrowUp) {
+            print('⌨️ [TreeView] SETA PARA CIMA pressionada (via onKeyEvent)');
+            if (_editingNodeId == null) {
+              _navigateUp();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
           }
           
-          // Log para outras teclas (mas não interfere)
-          print('⌨️ [TreeView] onKeyEvent - KeyDown: ${key.keyLabel} (${key.debugName})');
+          if (key == LogicalKeyboardKey.arrowDown) {
+            print('⌨️ [TreeView] SETA PARA BAIXO pressionada (via onKeyEvent)');
+            if (_editingNodeId == null) {
+              _navigateDown();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          }
+          
+          if (key == LogicalKeyboardKey.arrowLeft && _editingNodeId == null) {
+            print('⌨️ [TreeView] SETA PARA ESQUERDA pressionada (via onKeyEvent)');
+            _collapseSelected();
+            return KeyEventResult.handled;
+          }
+          
+          if (key == LogicalKeyboardKey.arrowRight && _editingNodeId == null) {
+            print('⌨️ [TreeView] SETA PARA DIREITA pressionada (via onKeyEvent)');
+            _expandSelected();
+            return KeyEventResult.handled;
+          }
         }
         
         // Captura F2 diretamente aqui para garantir que funcione
