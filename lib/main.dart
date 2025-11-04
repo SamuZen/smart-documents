@@ -1158,19 +1158,26 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     // Atalhos globais - sempre funcionam, mesmo com TextFields focados
-    // Usa excludeMode: true para garantir que comandos funcionem mesmo quando editando
+    // IMPORTANTE: O shortcut 'n' só é adicionado quando NÃO está editando
+    // para não interferir na digitação de texto em TextFields
+    final shortcuts = <LogicalKeySet, Intent>{
+      // Undo/Redo - sempre disponíveis
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _GlobalUndoIntent(),
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _GlobalRedoIntent(),
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _GlobalRedoIntent(),
+      // Deletar node - só funciona quando não está editando
+      // Apenas DEL (Delete), não Backspace
+      LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
+    };
+    
+    // Só adiciona shortcut 'n' quando NÃO está editando
+    // Isso permite que a letra 'n' seja digitada normalmente em TextFields
+    if (!_isEditing) {
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.keyN)] = const _AddNodeGlobalIntent();
+    }
+    
     return Shortcuts(
-      shortcuts: {
-        // Undo/Redo - sempre disponíveis
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _GlobalUndoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _GlobalRedoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _GlobalRedoIntent(),
-        // Adicionar node - só funciona quando não está editando
-        LogicalKeySet(LogicalKeyboardKey.keyN): const _AddNodeGlobalIntent(),
-        // Deletar node - só funciona quando não está editando
-        // Apenas DEL (Delete), não Backspace
-        LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
-      },
+      shortcuts: shortcuts,
       child: Actions(
         actions: {
           _GlobalUndoIntent: CallbackAction<_GlobalUndoIntent>(
@@ -1212,19 +1219,13 @@ class _MyHomePageState extends State<MyHomePage> {
           _AddNodeGlobalIntent: CallbackAction<_AddNodeGlobalIntent>(
             onInvoke: (_) {
               print('⌨️ [Main] N PRESSIONADO GLOBALMENTE');
-              print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
               print('   _isEditing: $_isEditing');
               print('   _selectedNodeId: $_selectedNodeId');
               print('   _showWindow: $_showWindow');
-              developer.log('Main: N pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId');
               
-              // Verifica o foco atual
-              final focusScope = FocusScope.of(context);
-              final focusedChild = focusScope.focusedChild;
-              print('   focusedChild: ${focusedChild?.runtimeType}');
-              developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
-              
-              // Só adiciona node se não estiver editando e houver um node selecionado
+              // Este callback só será chamado se o shortcut existir,
+              // e o shortcut só existe quando !_isEditing (definido no build)
+              // Mas ainda verificamos por segurança
               if (!_isEditing && _selectedNodeId != null && _showWindow) {
                 print('✅ [Main] Condições OK, adicionando node');
                 _handleAddNodeShortcut();
