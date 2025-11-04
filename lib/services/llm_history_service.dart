@@ -6,6 +6,9 @@ import '../models/llm_execution_history.dart';
 /// Serviço para gerenciar histórico de execuções LLM
 class LLMHistoryService {
   static const String _historyDirName = '.smart_actions';
+  
+  /// Callback chamado quando uma nova execução é salva
+  static Function(LLMExecutionHistory)? onExecutionSaved;
 
   /// Retorna o caminho do diretório de histórico para um projeto
   static Future<String> _getHistoryDir(String? projectPath) async {
@@ -50,6 +53,9 @@ class LLMHistoryService {
       // Salva execução em arquivo próprio
       final file = File(executionFilePath);
       await file.writeAsString(jsonEncode(execution.toJson()));
+      
+      // Notifica listeners sobre nova execução
+      onExecutionSaved?.call(execution);
     } catch (e) {
       print('Erro ao salvar histórico de execução: $e');
       rethrow;

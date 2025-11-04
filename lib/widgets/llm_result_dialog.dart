@@ -4,7 +4,7 @@ import '../models/llm_execution_history.dart';
 import '../theme/app_theme.dart';
 
 /// Dialog para exibir resultado de execução LLM
-class LLMResultDialog extends StatelessWidget {
+class LLMResultDialog extends StatefulWidget {
   final LLMExecutionHistory history;
 
   const LLMResultDialog({
@@ -23,12 +23,17 @@ class LLMResultDialog extends StatelessWidget {
     );
   }
 
-  void _copyToClipboard(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: history.response));
+  @override
+  State<LLMResultDialog> createState() => _LLMResultDialogState();
+}
+
+class _LLMResultDialogState extends State<LLMResultDialog> {
+  void _copyToClipboard(String text) {
+    Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Resposta copiada para a área de transferência!',
+          'Copiado para a área de transferência!',
           style: TextStyle(color: AppTheme.textPrimary),
         ),
         backgroundColor: AppTheme.surfaceVariantDark,
@@ -82,7 +87,7 @@ class LLMResultDialog extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          '${history.provider.displayName} - ${history.model}',
+                          '${widget.history.provider.displayName} - ${widget.history.model}',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textSecondary,
@@ -133,29 +138,79 @@ class LLMResultDialog extends StatelessWidget {
                             spacing: 16,
                             runSpacing: 8,
                             children: [
-                              if (history.tokensUsed != null)
+                              if (widget.history.tokensUsed != null)
                                 _buildMetadataItem(
                                   'Tokens',
-                                  history.tokensUsed.toString(),
+                                  widget.history.tokensUsed.toString(),
                                 ),
-                              if (history.responseTimeMs != null)
+                              if (widget.history.responseTimeMs != null)
                                 _buildMetadataItem(
                                   'Tempo',
-                                  '${history.responseTimeMs}ms',
+                                  '${widget.history.responseTimeMs}ms',
                                 ),
-                              if (history.cost != null)
+                              if (widget.history.cost != null)
                                 _buildMetadataItem(
                                   'Custo',
-                                  '\$${history.cost!.toStringAsFixed(4)}',
+                                  '\$${widget.history.cost!.toStringAsFixed(4)}',
                                 ),
                               _buildMetadataItem(
                                 'Data',
-                                _formatDateTime(history.timestamp),
+                                _formatDateTime(widget.history.timestamp),
                               ),
                             ],
                           ),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 20),
+                    // Input (Prompt) - Colapsável
+                    ExpansionTile(
+                      initiallyExpanded: false,
+                      title: Row(
+                        children: [
+                          Icon(
+                            Icons.input,
+                            size: 18,
+                            color: AppTheme.textSecondary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Input (Prompt)',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      onExpansionChanged: (expanded) {
+                        // Estado de expansão é gerenciado internamente pelo ExpansionTile
+                      },
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.backgroundDark,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppTheme.borderNeutral,
+                              width: 1,
+                            ),
+                          ),
+                          child: SelectableText(
+                            widget.history.prompt,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.textSecondary,
+                              fontFamily: 'monospace',
+                              height: 1.5,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     // Resposta
@@ -180,7 +235,7 @@ class LLMResultDialog extends StatelessWidget {
                         ),
                       ),
                       child: SelectableText(
-                        history.response,
+                        widget.history.response,
                         style: TextStyle(
                           fontSize: 13,
                           color: AppTheme.textSecondary,
@@ -208,9 +263,15 @@ class LLMResultDialog extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => _copyToClipboard(context),
+                    onPressed: () => _copyToClipboard(widget.history.prompt),
                     icon: const Icon(Icons.copy, size: 16),
-                    label: const Text('Copiar'),
+                    label: const Text('Copiar Input'),
+                  ),
+                  const SizedBox(width: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => _copyToClipboard(widget.history.response),
+                    icon: const Icon(Icons.copy, size: 16),
+                    label: const Text('Copiar Resposta'),
                   ),
                   const SizedBox(width: 12),
                   FilledButton(

@@ -27,6 +27,26 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
   void initState() {
     super.initState();
     _loadHistory();
+    // Registra listener para atualizações automáticas
+    LLMHistoryService.onExecutionSaved = _handleNewExecution;
+  }
+
+  @override
+  void dispose() {
+    // Remove listener ao destruir widget
+    LLMHistoryService.onExecutionSaved = null;
+    super.dispose();
+  }
+
+  void _handleNewExecution(LLMExecutionHistory execution) {
+    // Verifica se a execução pertence ao projeto atual
+    // (compara projectPath ou verifica se é do mesmo projeto)
+    setState(() {
+      // Adiciona nova execução no início da lista
+      _history.insert(0, execution);
+      // Ordena por timestamp (mais recente primeiro)
+      _history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    });
   }
 
   Future<void> _loadHistory() async {
@@ -82,7 +102,10 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
         execution.id,
         widget.projectPath,
       );
-      await _loadHistory();
+      // Remove da lista local
+      setState(() {
+        _history.removeWhere((e) => e.id == execution.id);
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
