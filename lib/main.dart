@@ -25,6 +25,7 @@ import 'utils/preferences.dart';
 import 'commands/set_node_field_command.dart';
 import 'commands/remove_node_field_command.dart';
 import 'theme/app_theme.dart';
+import 'widgets/git_status_indicator.dart';
 
 void main() {
   runApp(const MyApp());
@@ -1462,6 +1463,10 @@ class _MyHomePageState extends State<MyHomePage> {
                             projectPath: _currentProjectPath,
                           ),
                         ),
+                      // Indicador de status do Git no canto inferior direito
+                      GitStatusIndicator(
+                        projectPath: _currentProjectPath,
+                      ),
                     ],
                   ),
           ),
