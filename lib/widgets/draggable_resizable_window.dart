@@ -270,7 +270,11 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                         Material(
                           color: Colors.transparent,
                           child: InkWell(
-                            onTap: widget.onClose,
+                            onTap: () {
+                              print('🖱️ [DraggableResizableWindow] Botão fechar clicado');
+                              // Não solicita foco - apenas fecha a janela
+                              widget.onClose?.call();
+                            },
                             borderRadius: BorderRadius.circular(4),
                             child: Container(
                               padding: const EdgeInsets.all(4),
