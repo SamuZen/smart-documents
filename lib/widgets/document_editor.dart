@@ -1410,31 +1410,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
           child: hasImage
               ? Row(
                   children: [
-                    // Preview da imagem
-                    Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppTheme.borderNeutral),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: Image.file(
-                          File(resolvedPath),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: AppTheme.surfaceVariantDark,
-                              child: Icon(
-                                Icons.broken_image,
-                                size: 24,
-                                color: AppTheme.textTertiary,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                    // Preview da imagem com hover para ampliar
+                    _ImageHoverPreviewWidget(
+                      imagePath: resolvedPath,
+                      previewSize: 60,
+                      hoverSize: 300,
                     ),
                     const SizedBox(width: 8),
                     // Caminho da imagem
@@ -1498,30 +1478,10 @@ class _DocumentEditorState extends State<DocumentEditor> {
           child: hasImage
               ? Row(
                   children: [
-                    Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: AppTheme.borderNeutral),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: Image.file(
-                          File(resolvedPath),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: AppTheme.surfaceVariantDark,
-                              child: Icon(
-                                Icons.broken_image,
-                                size: 20,
-                                color: AppTheme.textTertiary,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                    _ImageHoverPreviewWidget(
+                      imagePath: resolvedPath,
+                      previewSize: 50,
+                      hoverSize: 300,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1725,5 +1685,141 @@ class _DocumentEditorState extends State<DocumentEditor> {
       }
       return newValue;
     });
+  }
+}
+
+/// Widget que mostra preview da imagem com ampliação no hover
+class _ImageHoverPreviewWidget extends StatefulWidget {
+  final String imagePath;
+  final double previewSize;
+  final double hoverSize;
+
+  const _ImageHoverPreviewWidget({
+    required this.imagePath,
+    required this.previewSize,
+    required this.hoverSize,
+  });
+
+  @override
+  State<_ImageHoverPreviewWidget> createState() => _ImageHoverPreviewWidgetState();
+}
+
+class _ImageHoverPreviewWidgetState extends State<_ImageHoverPreviewWidget> {
+  bool _isHovering = false;
+  OverlayEntry? _overlayEntry;
+
+  @override
+  void dispose() {
+    _removeOverlay();
+    super.dispose();
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _showHoverImage(BuildContext context, Offset position) {
+    _removeOverlay();
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        left: position.dx + 20,
+        top: position.dy - widget.hoverSize / 2,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: widget.hoverSize,
+            height: widget.hoverSize,
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceElevated,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppTheme.neonBlue.withOpacity(0.5),
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 20,
+                  spreadRadius: 5,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(
+                File(widget.imagePath),
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: AppTheme.surfaceVariantDark,
+                    child: Icon(
+                      Icons.broken_image,
+                      size: 64,
+                      color: AppTheme.textTertiary,
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (event) {
+        setState(() {
+          _isHovering = true;
+        });
+        final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
+        if (renderBox != null) {
+          final position = renderBox.localToGlobal(Offset.zero);
+          _showHoverImage(context, position);
+        }
+      },
+      onExit: (event) {
+        setState(() {
+          _isHovering = false;
+        });
+        _removeOverlay();
+      },
+      child: Container(
+        width: widget.previewSize,
+        height: widget.previewSize,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: _isHovering 
+                ? AppTheme.neonBlue.withOpacity(0.6)
+                : AppTheme.borderNeutral,
+            width: _isHovering ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: Image.file(
+            File(widget.imagePath),
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                color: AppTheme.surfaceVariantDark,
+                child: Icon(
+                  Icons.broken_image,
+                  size: widget.previewSize * 0.4,
+                  color: AppTheme.textTertiary,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
   }
 }
