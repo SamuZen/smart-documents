@@ -1947,7 +1947,7 @@ class _MyHomePageState extends State<MyHomePage> {
                       // Janela Prompt Composer - seleção múltipla e formatação para LLM
                       if (_showComposerWindow)
                         DraggableResizableWindow(
-                          key: const ValueKey('composer_window'),
+                          key: ValueKey('composer_window_${_rootNode.id}_${_promptsRootNode.id}'),
                           title: 'Prompt Composer',
                           initialWidth: 800,
                           initialHeight: 600,
@@ -1960,6 +1960,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           child: ComposerWindow(
+                            key: ValueKey('composer_${_rootNode.id}_${_promptsRootNode.id}'),
                             rootNode: _rootNode,
                             promptsRootNode: _promptsRootNode,
                             projectPath: _currentProjectPath,

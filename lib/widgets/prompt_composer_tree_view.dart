@@ -58,10 +58,22 @@ class _PromptComposerTreeViewState extends State<PromptComposerTreeView> {
       _expandAllNodes();
     }
     // Atualiza seleções quando initialSelection muda
-    if (widget.initialSelection != null &&
-        widget.initialSelection != oldWidget.initialSelection) {
+    // Compara o conteúdo dos sets, não apenas a referência
+    if (widget.initialSelection != null) {
+      final currentSet = Set<String>.from(_selectedNodeIds);
+      final newSet = Set<String>.from(widget.initialSelection!);
+      
+      // Verifica se há diferença no conteúdo
+      if (currentSet.length != newSet.length || 
+          !currentSet.containsAll(newSet) ||
+          !newSet.containsAll(currentSet)) {
+        _selectedNodeIds.clear();
+        _selectedNodeIds.addAll(widget.initialSelection!);
+        setState(() {});
+      }
+    } else if (_selectedNodeIds.isNotEmpty) {
+      // Se initialSelection foi removido, limpa seleções
       _selectedNodeIds.clear();
-      _selectedNodeIds.addAll(widget.initialSelection!);
       setState(() {});
     }
   }

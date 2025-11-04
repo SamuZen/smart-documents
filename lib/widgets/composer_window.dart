@@ -27,6 +27,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
   late PromptService _promptService;
   bool _includeChildren = false;
   int _selectedTab = 0; // 0 = Nodes, 1 = Prompts
+  final Set<String> _selectedNodeIds = {}; // IDs dos nodes selecionados (estado local)
   final Set<String> _selectedPromptIds = {}; // IDs dos prompts selecionados
 
   @override
@@ -47,12 +48,16 @@ class _ComposerWindowState extends State<ComposerWindow> {
       final state = await ComposerStateService.loadState(widget.projectPath!);
       
       setState(() {
-        // Restaura seleções de nodes
-        _promptService.setSelectedNodes(state.selectedNodeIds);
+        // Restaura seleções de nodes no estado local
+        _selectedNodeIds.clear();
+        _selectedNodeIds.addAll(state.selectedNodeIds);
         
         // Restaura seleções de prompts
         _selectedPromptIds.clear();
         _selectedPromptIds.addAll(state.selectedPromptIds);
+        
+        // Atualiza o serviço com as seleções restauradas
+        _promptService.setSelectedNodes(_selectedNodeIds);
         _promptService.setSelectedPrompts(_selectedPromptIds);
         
         // Restaura outras configurações
@@ -70,7 +75,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
 
     try {
       final state = ComposerState(
-        selectedNodeIds: _promptService.getSelectedNodeIds(),
+        selectedNodeIds: _selectedNodeIds,
         selectedPromptIds: _selectedPromptIds,
         includeChildren: _includeChildren,
         selectedTab: _selectedTab,
@@ -85,20 +90,100 @@ class _ComposerWindowState extends State<ComposerWindow> {
   @override
   void didUpdateWidget(ComposerWindow oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Atualiza o serviço quando rootNode ou promptsRootNode muda
-    if (oldWidget.rootNode.id != widget.rootNode.id ||
-        oldWidget.promptsRootNode.id != widget.promptsRootNode.id ||
-        oldWidget.projectPath != widget.projectPath) {
+    
+    // Como Nodes são imutáveis, se os widgets mudaram, significa que houve alteração
+    // Salva as seleções atuais antes de atualizar (usa estado local, não o serviço)
+    final currentSelectedNodeIds = Set<String>.from(_selectedNodeIds);
+    final currentSelectedPromptIds = Set<String>.from(_selectedPromptIds);
+    
+    // Verifica se houve mudança real comparando referências e propriedades básicas
+    // Como Nodes são imutáveis, uma nova referência significa mudança
+    final rootNodeChanged = oldWidget.rootNode != widget.rootNode ||
+        oldWidget.rootNode.name != widget.rootNode.name ||
+        oldWidget.rootNode.children.length != widget.rootNode.children.length ||
+        oldWidget.rootNode.fields.length != widget.rootNode.fields.length;
+    
+    final promptsRootNodeChanged = oldWidget.promptsRootNode != widget.promptsRootNode ||
+        oldWidget.promptsRootNode.name != widget.promptsRootNode.name ||
+        oldWidget.promptsRootNode.children.length != widget.promptsRootNode.children.length ||
+        oldWidget.promptsRootNode.fields.length != widget.promptsRootNode.fields.length;
+    
+    final projectPathChanged = oldWidget.projectPath != widget.projectPath;
+    
+    // Se houve mudança, atualiza o serviço
+    if (rootNodeChanged || promptsRootNodeChanged || projectPathChanged) {
+      // Atualiza o PromptService com os novos nodes primeiro
       _promptService = PromptService(
         rootNode: widget.rootNode,
         promptsRootNode: widget.promptsRootNode,
       );
-      // Recarrega o estado quando o projeto muda
-      if (oldWidget.projectPath != widget.projectPath) {
-        _loadState();
+      
+      // Valida e limpa seleções de nodes que não existem mais, preservando as válidas
+      Set<String> validNodeIds;
+      if (rootNodeChanged) {
+        validNodeIds = _validateAndCleanNodeSelections(currentSelectedNodeIds);
+      } else {
+        // Se não mudou, mantém as seleções atuais
+        validNodeIds = currentSelectedNodeIds;
       }
-      setState(() {});
+      
+      // Valida e limpa seleções de prompts que não existem mais, preservando as válidas
+      Set<String> validPromptIds;
+      if (promptsRootNodeChanged) {
+        validPromptIds = _validateAndCleanPromptSelections(currentSelectedPromptIds);
+      } else {
+        // Se não mudou, mantém as seleções atuais
+        validPromptIds = currentSelectedPromptIds;
+      }
+      
+      // Restaura as seleções válidas no estado local e no novo serviço
+      setState(() {
+        _selectedNodeIds.clear();
+        _selectedNodeIds.addAll(validNodeIds);
+        _selectedPromptIds.clear();
+        _selectedPromptIds.addAll(validPromptIds);
+      });
+      
+      // Atualiza o serviço com as seleções restauradas
+      _promptService.setSelectedNodes(_selectedNodeIds);
+      _promptService.setSelectedPrompts(_selectedPromptIds);
+      
+      // Recarrega o estado quando o projeto muda
+      if (projectPathChanged) {
+        _loadState();
+      } else {
+        // Salva o estado atualizado se não foi mudança de projeto
+        _saveState();
+      }
     }
+  }
+
+  /// Valida e remove seleções de nodes que não existem mais na árvore
+  /// Retorna o conjunto de IDs válidos
+  Set<String> _validateAndCleanNodeSelections(Set<String> selectedNodeIds) {
+    final validNodeIds = <String>{};
+    
+    for (final nodeId in selectedNodeIds) {
+      if (widget.rootNode.findById(nodeId) != null) {
+        validNodeIds.add(nodeId);
+      }
+    }
+    
+    return validNodeIds;
+  }
+
+  /// Valida e remove seleções de prompts que não existem mais na árvore
+  /// Retorna o conjunto de IDs válidos
+  Set<String> _validateAndCleanPromptSelections(Set<String> selectedPromptIds) {
+    final validPromptIds = <String>{};
+    
+    for (final promptId in selectedPromptIds) {
+      if (widget.promptsRootNode.findById(promptId) != null) {
+        validPromptIds.add(promptId);
+      }
+    }
+    
+    return validPromptIds;
   }
 
   void _handlePromptSelectionChanged(Set<String> selectedPromptIds) {
@@ -112,7 +197,9 @@ class _ComposerWindowState extends State<ComposerWindow> {
 
   void _handleSelectionChanged(Set<String> selectedNodeIds) {
     setState(() {
-      _promptService.setSelectedNodes(selectedNodeIds);
+      _selectedNodeIds.clear();
+      _selectedNodeIds.addAll(selectedNodeIds);
+      _promptService.setSelectedNodes(_selectedNodeIds);
     });
     _saveState(); // Salva estado após mudança
   }
@@ -438,7 +525,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
               ),
               const Spacer(),
               Text(
-                '${_promptService.getSelectedNodeIds().length} selecionado(s)',
+                '${_selectedNodeIds.length} selecionado(s)',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
@@ -451,7 +538,7 @@ class _ComposerWindowState extends State<ComposerWindow> {
         Expanded(
           child: PromptComposerTreeView(
             rootNode: widget.rootNode,
-            initialSelection: _promptService.getSelectedNodeIds(),
+            initialSelection: _selectedNodeIds,
             onSelectionChanged: _handleSelectionChanged,
           ),
         ),
