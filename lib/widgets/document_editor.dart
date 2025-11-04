@@ -171,16 +171,14 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
   String _getValueType(dynamic value) {
     if (value is String) return 'String';
-    if (value is int) return 'int';
-    if (value is double) return 'double';
+    if (value is int || value is double) return 'number';
     if (value is bool) return 'bool';
     return 'String';
   }
 
   IconData _getIconForType(String type) {
     switch (type) {
-      case 'int':
-      case 'double':
+      case 'number':
         return Icons.tag;
       case 'bool':
         return Icons.toggle_on;
@@ -192,8 +190,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
   Color _getIconColorForType(String type) {
     switch (type) {
-      case 'int':
-      case 'double':
+      case 'number':
         return AppTheme.neonBlue;
       case 'bool':
         return AppTheme.neonCyan;
@@ -205,10 +202,17 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
   dynamic _parseValue(String value, String type) {
     switch (type) {
-      case 'int':
-        return int.tryParse(value) ?? 0;
-      case 'double':
-        return double.tryParse(value) ?? 0.0;
+      case 'number':
+        // Tenta primeiro como double, depois como int
+        final doubleValue = double.tryParse(value);
+        if (doubleValue != null) {
+          // Se é um número inteiro, retorna int; senão retorna double
+          if (doubleValue == doubleValue.truncateToDouble()) {
+            return doubleValue.toInt();
+          }
+          return doubleValue;
+        }
+        return 0;
       case 'bool':
         return value.toLowerCase() == 'true';
       case 'String':
@@ -470,12 +474,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                     fillColor: AppTheme.surfaceVariantDark,
                                   ),
                                   style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                                  items: const [
-                                    DropdownMenuItem(value: 'String', child: Text('String')),
-                                    DropdownMenuItem(value: 'int', child: Text('int')),
-                                    DropdownMenuItem(value: 'double', child: Text('double')),
-                                    DropdownMenuItem(value: 'bool', child: Text('bool')),
-                                  ],
+                                    items: const [
+                                      DropdownMenuItem(value: 'String', child: Text('String')),
+                                      DropdownMenuItem(value: 'number', child: Text('number')),
+                                      DropdownMenuItem(value: 'bool', child: Text('bool')),
+                                    ],
                                   onChanged: (value) {
                                     setState(() {
                                       _newFieldType = value ?? 'String';
@@ -516,6 +519,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                                         focusNode: _newFieldValueFocusNode,
                                         label: 'Valor',
                                         hintText: _getHintForType(_newFieldType),
+                                        fieldType: _newFieldType,
                                       ),
                               ),
                             ],
@@ -662,6 +666,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                             : TextField(
                                 controller: controller,
                                 focusNode: focusNode,
+                                inputFormatters: type == 'number' ? [_getNumberFormatter()] : null,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: AppTheme.textPrimary,
@@ -708,10 +713,12 @@ class _DocumentEditorState extends State<DocumentEditor> {
     required String label,
     String? hintText,
     IconData? icon,
+    String? fieldType, // Tipo do campo para aplicar formatter de número
   }) {
     return TextField(
       controller: controller,
       focusNode: focusNode,
+      inputFormatters: fieldType == 'number' ? [_getNumberFormatter()] : null,
       style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: label,
@@ -738,15 +745,42 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
   String _getHintForType(String type) {
     switch (type) {
-      case 'int':
-        return 'Ex: 100';
-      case 'double':
-        return 'Ex: 3.14';
+      case 'number':
+        return 'Ex: 100 ou 3.14';
       case 'bool':
         return 'true ou false';
       case 'String':
       default:
         return 'Ex: Meu texto';
     }
+  }
+
+  /// Input formatter que substitui vírgulas por pontos em números
+  TextInputFormatter _getNumberFormatter() {
+    return TextInputFormatter.withFunction((oldValue, newValue) {
+      // Se a mudança foi apenas adicionar uma vírgula, substitui por ponto
+      if (newValue.text.length > oldValue.text.length) {
+        final addedText = newValue.text.substring(oldValue.text.length);
+        if (addedText == ',') {
+          final newText = newValue.text.replaceAll(',', '.');
+          final cursorOffset = newValue.selection.baseOffset;
+          return TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(offset: cursorOffset),
+          );
+        }
+      }
+      // Substitui todas as vírgulas existentes por pontos
+      final newText = newValue.text.replaceAll(',', '.');
+      if (newText != newValue.text) {
+        // Mantém a posição do cursor relativa
+        final offset = newValue.selection.baseOffset;
+        return TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: offset),
+        );
+      }
+      return newValue;
+    });
   }
 }
