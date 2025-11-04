@@ -28,6 +28,9 @@ class AppMenuBar extends StatelessWidget {
   final bool showDocumentEditor;
   final bool showComposer;
   final bool showPrompts;
+  
+  // Settings menu callback
+  final VoidCallback? onOpenSettings;
 
   const AppMenuBar({
     super.key,
@@ -54,6 +57,7 @@ class AppMenuBar extends StatelessWidget {
     this.showDocumentEditor = true,
     this.showComposer = false,
     this.showPrompts = false,
+    this.onOpenSettings,
   });
 
   @override
@@ -163,6 +167,17 @@ class AppMenuBar extends StatelessWidget {
                 icon: showPrompts ? Icons.check_box : Icons.check_box_outline_blank,
                 label: 'Prompts',
                 onPressed: onTogglePrompts,
+              ),
+            ],
+          ),
+          // Menu Configurações
+          _MenuButton(
+            label: 'Configurações',
+            menuItems: [
+              _MenuItem(
+                icon: Icons.settings,
+                label: 'Configurações...',
+                onPressed: onOpenSettings,
               ),
             ],
           ),
