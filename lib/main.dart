@@ -21,6 +21,7 @@ import 'widgets/menu_bar.dart';
 import 'widgets/checkpoint_dialog.dart';
 import 'widgets/confirmation_dialog.dart';
 import 'screens/welcome_screen.dart';
+import 'screens/settings_screen.dart';
 import 'utils/preferences.dart';
 import 'commands/set_node_field_command.dart';
 import 'commands/remove_node_field_command.dart';
@@ -71,6 +72,7 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _currentProjectPath;
   bool _hasUnsavedChanges = false;
   bool _showWelcomeScreen = true; // Inicia mostrando a tela de boas-vindas
+  bool _showSettingsScreen = false; // Tela de configurações
 
   // Sistema de comandos
   late CommandHistory _commandHistory;
@@ -1608,6 +1610,18 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
+  void _handleOpenSettings() {
+    setState(() {
+      _showSettingsScreen = true;
+    });
+  }
+
+  void _handleCloseSettings() {
+    setState(() {
+      _showSettingsScreen = false;
+    });
+  }
+
   String _getWindowTitle() {
     if (_showWelcomeScreen) {
       return 'Smart Document - Sem projeto';
@@ -1801,16 +1815,21 @@ class _MyHomePageState extends State<MyHomePage> {
             showActions: _showActionsWindow,
             showDocumentEditor: _showDocumentEditor,
             showComposer: _showComposerWindow,
+            onOpenSettings: _handleOpenSettings,
           ),
           // Conteúdo principal
           Expanded(
-            child: _showWelcomeScreen
-                ? WelcomeScreen(
-                    onNewProject: _handleNewProject,
-                    onOpenProject: _handleOpenProject,
-                    onOpenRecentProject: _handleOpenRecentProject,
+            child: _showSettingsScreen
+                ? SettingsScreen(
+                    onClose: _handleCloseSettings,
                   )
-                : Stack(
+                : _showWelcomeScreen
+                    ? WelcomeScreen(
+                        onNewProject: _handleNewProject,
+                        onOpenProject: _handleOpenProject,
+                        onOpenRecentProject: _handleOpenRecentProject,
+                      )
+                    : Stack(
                     children: [
                       // Área principal - Background escuro para contraste
                       Container(
