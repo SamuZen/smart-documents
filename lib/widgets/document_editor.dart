@@ -12,6 +12,11 @@ class _TabIndentIntent extends Intent {
   const _TabIndentIntent();
 }
 
+/// Intent para cancelar edição de key
+class _CancelKeyEditIntent extends Intent {
+  const _CancelKeyEditIntent();
+}
+
 /// Widget para editar campos personalizados de um node (inspector-style)
 class DocumentEditor extends StatefulWidget {
   final Node? selectedNode;
@@ -47,6 +52,8 @@ class _DocumentEditorState extends State<DocumentEditor> {
   late final FocusNode _newFieldValueFocusNode;
   bool _showAddField = false;
   bool _isDraggingFiles = false;
+  String? _editingFieldKey; // Key do campo sendo editado
+  final TextEditingController _editingKeyController = TextEditingController();
 
   // Chave especial para armazenar metadados de tipos de campos
   static const String _fieldTypesKey = '__fieldTypes__';
@@ -1099,19 +1106,42 @@ class _DocumentEditorState extends State<DocumentEditor> {
                           ),
                           const SizedBox(height: 8),
                           
-                          // Botão adicionar
-                          SizedBox(
-                            width: double.infinity,
-                            child: TextButton.icon(
-                              onPressed: _addNewField,
-                              icon: const Icon(Icons.add, size: 16),
-                              label: const Text('Adicionar'),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(vertical: 6),
-                                backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
-                                foregroundColor: AppTheme.neonBlue,
+                          // Botões adicionar e cancelar
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: _addNewField,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Adicionar'),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
+                                    foregroundColor: AppTheme.neonBlue,
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextButton.icon(
+                                  onPressed: () {
+                                    setState(() {
+                                      _showAddField = false;
+                                      _newFieldKeyController.clear();
+                                      _newFieldValueController.clear();
+                                      _newFieldType = 'String';
+                                    });
+                                  },
+                                  icon: const Icon(Icons.close, size: 16),
+                                  label: const Text('Cancelar'),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    backgroundColor: AppTheme.surfaceVariantDark,
+                                    foregroundColor: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1150,17 +1180,80 @@ class _DocumentEditorState extends State<DocumentEditor> {
       child: Row(
         crossAxisAlignment: isLongString ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          // Label à esquerda
+          // Label à esquerda (editável)
           SizedBox(
             width: 100,
-            child: Text(
-              key,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
+            child: _editingFieldKey == key
+                ? Shortcuts(
+                    shortcuts: {
+                      LogicalKeySet(LogicalKeyboardKey.escape): const _CancelKeyEditIntent(),
+                    },
+                    child: Actions(
+                      actions: {
+                        _CancelKeyEditIntent: CallbackAction<_CancelKeyEditIntent>(
+                          onInvoke: (_) {
+                            setState(() {
+                              _editingFieldKey = null;
+                              _editingKeyController.clear();
+                            });
+                            return null;
+                          },
+                        ),
+                      },
+                      child: TextField(
+                        controller: _editingKeyController,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          border: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: AppTheme.neonBlue, width: 1.5),
+                          ),
+                        ),
+                        onSubmitted: (newKey) {
+                          _confirmKeyEdit(key, newKey);
+                        },
+                        autofocus: true,
+                      ),
+                    ),
+                  )
+                : InkWell(
+                    onTap: () {
+                      setState(() {
+                        _editingFieldKey = key;
+                        _editingKeyController.text = key;
+                      });
+                    },
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            key,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.edit,
+                          size: 12,
+                          color: AppTheme.textTertiary,
+                        ),
+                      ],
+                    ),
+                  ),
           ),
           
           const SizedBox(width: 8),
@@ -1687,6 +1780,95 @@ class _DocumentEditorState extends State<DocumentEditor> {
     }
   }
 
+
+  /// Confirma a edição do key de um campo
+  void _confirmKeyEdit(String oldKey, String newKey) {
+    if (widget.selectedNode == null) return;
+
+    final trimmedNewKey = newKey.trim();
+    
+    // Validações
+    if (trimmedNewKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('O nome do campo não pode estar vazio')),
+      );
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
+
+    if (trimmedNewKey == oldKey) {
+      // Não houve mudança, apenas cancela
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
+
+    // Verifica se já existe um campo com esse nome
+    if (widget.selectedNode!.fields.containsKey(trimmedNewKey)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Já existe um campo com este nome')),
+      );
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
+
+    // Renomeia o campo
+    final fields = Map<String, dynamic>.from(widget.selectedNode!.fields);
+    final value = fields[oldKey];
+    final fieldType = _fieldTypes[oldKey];
+
+    // Remove o campo antigo
+    fields.remove(oldKey);
+    if (_fieldTypes.containsKey(oldKey)) {
+      _fieldTypes.remove(oldKey);
+    }
+
+    // Adiciona com o novo nome
+    fields[trimmedNewKey] = value;
+    if (fieldType != null) {
+      _fieldTypes[trimmedNewKey] = fieldType;
+    }
+
+    // Atualiza o node - primeiro remove o antigo, depois adiciona com o novo nome
+    widget.onFieldRemoved(widget.selectedNode!.id, oldKey); // Remove o campo antigo
+    widget.onFieldAdded(widget.selectedNode!.id, trimmedNewKey, value); // Adiciona com novo nome
+
+    // Atualiza os controllers
+    if (_controllers.containsKey(oldKey)) {
+      _controllers[trimmedNewKey] = _controllers.remove(oldKey)!;
+    }
+    if (_focusNodes.containsKey(oldKey)) {
+      _focusNodes[trimmedNewKey] = _focusNodes.remove(oldKey)!;
+    }
+    if (_descriptionControllers.containsKey(oldKey)) {
+      _descriptionControllers[trimmedNewKey] = _descriptionControllers.remove(oldKey)!;
+    }
+
+    // Salva o tipo do campo se existir
+    if (fieldType != null) {
+      _saveFieldType(trimmedNewKey, fieldType);
+    }
+
+    setState(() {
+      _editingFieldKey = null;
+      _editingKeyController.clear();
+    });
+
+    // Atualiza os controllers
+    _updateControllers();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Campo renomeado de "$oldKey" para "$trimmedNewKey"')),
+    );
+  }
 
   /// Input formatter que substitui vírgulas por pontos em números
   TextInputFormatter _getNumberFormatter() {

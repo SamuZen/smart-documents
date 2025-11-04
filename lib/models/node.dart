@@ -147,11 +147,16 @@ class Node {
 
   /// Converte o Node para JSON recursivamente
   Map<String, dynamic> toJson() {
+    // Remove campos com valor null antes de serializar
+    final cleanedFields = Map<String, dynamic>.fromEntries(
+      fields.entries.where((entry) => entry.value != null),
+    );
+    
     return {
       'id': id,
       'name': name,
       'children': children.map((child) => child.toJson()).toList(),
-      'fields': fields,
+      'fields': cleanedFields,
     };
   }
 
