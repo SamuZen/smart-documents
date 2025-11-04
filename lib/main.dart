@@ -1306,11 +1306,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       // Janela flutuante com TreeView
                       if (_showWindow)
                         DraggableResizableWindow(
+                          key: const ValueKey('navigation_window'),
                           title: 'Navegação',
                           initialWidth: 300,
                           initialHeight: 500,
                           minWidth: 250,
                           minHeight: 300,
+                          initialPosition: const Offset(50, 50),
                           onClose: () {
                             setState(() {
                               _showWindow = false;
@@ -1339,11 +1341,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       // Janela flutuante com ActionsPanel (sempre visível)
                       if (_showActionsWindow)
                         DraggableResizableWindow(
+                          key: const ValueKey('actions_window'),
                           title: 'Ações',
                           initialWidth: 350,
                           initialHeight: 500,
                           minWidth: 280,
                           minHeight: 300,
+                          initialPosition: const Offset(400, 50),
                           onClose: () {
                             setState(() {
                               _showActionsWindow = false;
@@ -1365,11 +1369,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       // Janela flutuante com DocumentEditor
                       if (_showDocumentEditor)
                         DraggableResizableWindow(
+                          key: const ValueKey('document_editor_window'),
                           title: 'Editor de Documento',
                           initialWidth: 400,
                           initialHeight: 600,
                           minWidth: 350,
                           minHeight: 400,
+                          initialPosition: const Offset(800, 50),
                           onClose: () {
                             setState(() {
                               _showDocumentEditor = false;

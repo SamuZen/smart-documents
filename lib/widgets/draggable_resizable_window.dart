@@ -8,6 +8,7 @@ class DraggableResizableWindow extends StatefulWidget {
   final double initialHeight;
   final double minWidth;
   final double minHeight;
+  final Offset? initialPosition; // Posição inicial customizada
   final VoidCallback? onClose;
   final VoidCallback? onTap; // Callback quando a janela é clicada (para retornar foco)
 
@@ -19,6 +20,7 @@ class DraggableResizableWindow extends StatefulWidget {
     this.initialHeight = 400,
     this.minWidth = 200,
     this.minHeight = 200,
+    this.initialPosition,
     this.onClose,
     this.onTap,
   });
@@ -52,7 +54,8 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
     super.initState();
     _width = widget.initialWidth;
     _height = widget.initialHeight;
-    _position = const Offset(100, 100);
+    // Usa posição inicial customizada se fornecida, senão usa posição padrão
+    _position = widget.initialPosition ?? const Offset(100, 100);
   }
 
   void _onDragStart(DragStartDetails details) {
