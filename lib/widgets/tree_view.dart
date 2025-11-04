@@ -1158,13 +1158,29 @@ class _TreeViewState extends State<TreeView> {
             ),
             child: ListView(
               padding: const EdgeInsets.all(8.0),
-              children: _buildTreeNodes(_rootNode, 0),
+              children: _rootNode.name.isEmpty 
+                ? _buildTreeNodesStartingFromChildren(_rootNode, 0)
+                : _buildTreeNodes(_rootNode, 0),
             ),
           ),
         ),
       ),
       ),
     );
+  }
+
+  /// Constrói os nodes começando dos filhos (ignora o root)
+  List<Widget> _buildTreeNodesStartingFromChildren(Node rootNode, int depth) {
+    final List<Widget> widgets = [];
+    // Expande o root automaticamente para mostrar os filhos
+    final isRootExpanded = _isExpanded(rootNode.id) || rootNode.name.isEmpty;
+    
+    if (isRootExpanded || rootNode.name.isEmpty) {
+      for (final child in rootNode.children) {
+        widgets.addAll(_buildTreeNodes(child, depth));
+      }
+    }
+    return widgets;
   }
 
   List<Widget> _buildTreeNodes(Node node, int depth) {

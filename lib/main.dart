@@ -28,6 +28,7 @@ import 'commands/set_node_field_types_command.dart';
 import 'theme/app_theme.dart';
 import 'widgets/git_status_indicator.dart';
 import 'widgets/composer_window.dart';
+import 'services/prompt_storage_service.dart';
 
 void main() {
   runApp(const MyApp());
@@ -78,6 +79,11 @@ class _MyHomePageState extends State<MyHomePage> {
   String? _undoDescription;
   String? _redoDescription;
   
+  // Gerenciamento de prompts (agora como estrutura de nodes)
+  late Node _promptsRootNode;
+  String? _selectedPromptNodeId;
+  final Set<String> _expandedPromptNodes = {};
+  
   // FocusNode principal para capturar atalhos globais
   final FocusNode _mainFocusNode = FocusNode();
 
@@ -88,6 +94,12 @@ class _MyHomePageState extends State<MyHomePage> {
     _rootNode = Node(
       id: 'root',
       name: 'Novo Projeto',
+    );
+
+    // Inicia estrutura de prompts vazia
+    _promptsRootNode = Node(
+      id: 'prompts-root',
+      name: 'Prompts',
     );
 
     // Inicializa sistema de comandos
@@ -261,9 +273,29 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   void _handleAddNodeShortcut() {
-    // Este método é chamado quando 'n' é pressionado globalmente
-    // Cria um novo node filho do node selecionado
-    if (_selectedNodeId == null || _isEditing) {
+    // Este método é chamado quando Control+N é pressionado globalmente
+    // Cria um novo node/prompt filho do node selecionado
+    if (_isEditing) {
+      return;
+    }
+
+    // Verifica se há um prompt selecionado
+    if (_selectedPromptNodeId != null) {
+      final parentPromptNode = _promptsRootNode.findById(_selectedPromptNodeId!);
+      if (parentPromptNode != null) {
+        // Gera um ID único para o novo prompt
+        final timestamp = DateTime.now().millisecondsSinceEpoch;
+        final newPromptId = 'new_prompt_$timestamp';
+        final newPromptName = 'Novo Prompt';
+        
+        // Cria o novo prompt
+        _handlePromptNodeAdded(_selectedPromptNodeId!, newPromptId, newPromptName);
+        return;
+      }
+    }
+
+    // Verifica se há um node do projeto selecionado
+    if (_selectedNodeId == null) {
       return;
     }
 
@@ -283,8 +315,51 @@ class _MyHomePageState extends State<MyHomePage> {
 
   void _handleDeleteNodeShortcut() {
     // Este método é chamado quando Delete/Backspace é pressionado globalmente
-    // Deleta o node selecionado (com confirmação)
-    if (_selectedNodeId == null || _isEditing) {
+    // Deleta o node/prompt selecionado (com confirmação)
+    if (_isEditing) {
+      return;
+    }
+
+    // Verifica se há um prompt selecionado
+    if (_selectedPromptNodeId != null) {
+      final promptToDelete = _promptsRootNode.findById(_selectedPromptNodeId!);
+      if (promptToDelete != null) {
+        // Não permite deletar o root de prompts
+        if (_selectedPromptNodeId == _promptsRootNode.id) {
+          return;
+        }
+
+        // Conta quantos descendentes o prompt tem
+        final descendantCount = promptToDelete.countAllDescendants();
+        
+        // Formata a mensagem de confirmação
+        String message;
+        if (descendantCount == 0) {
+          message = 'Você quer deletar o prompt "${promptToDelete.name}"?';
+        } else {
+          final childText = descendantCount == 1 ? 'item filho' : 'itens filhos';
+          message = 'Você quer deletar o prompt "${promptToDelete.name}"? Irá deletar também $descendantCount $childText.';
+        }
+
+        // Mostra dialog de confirmação
+        ConfirmationDialog.show(
+          context: context,
+          title: 'Confirmar deleção',
+          message: message,
+          confirmText: 'Deletar',
+          cancelText: 'Cancelar',
+          isDestructive: true,
+          onConfirm: () {
+            // Usuário confirmou, deleta o prompt
+            _handlePromptNodeDeleted(_selectedPromptNodeId!);
+          },
+        );
+      }
+      return;
+    }
+
+    // Verifica se há um node do projeto selecionado
+    if (_selectedNodeId == null) {
       return;
     }
 
@@ -488,9 +563,168 @@ class _MyHomePageState extends State<MyHomePage> {
     return _rootNode.findById(_selectedNodeId!);
   }
 
+  Node? _getSelectedPromptNode() {
+    if (_selectedPromptNodeId == null) return null;
+    return _promptsRootNode.findById(_selectedPromptNodeId!);
+  }
+
+  /// Cria um root virtual que combina nodes do projeto e prompts para exibição na TreeView
+  Node _getCombinedRootNode() {
+    final combinedRoot = Node(
+      id: 'combined-root',
+      name: 'Projeto',
+    );
+    // Adiciona o rootNode do projeto como filho
+    combinedRoot.addChild(_rootNode);
+    // Adiciona o promptsRootNode como filho
+    combinedRoot.addChild(_promptsRootNode);
+    return combinedRoot;
+  }
+
+  /// Verifica se um nodeId pertence aos prompts ou aos nodes do projeto
+  bool _isPromptNode(String nodeId) {
+    // Se o node está em _promptsRootNode, é um prompt
+    return _promptsRootNode.findById(nodeId) != null;
+  }
+
+  /// Verifica se um nodeId pertence aos nodes do projeto
+  bool _isProjectNode(String nodeId) {
+    // Se o node está em _rootNode, é um node do projeto
+    return _rootNode.findById(nodeId) != null;
+  }
+
   bool? _getSelectedNodeExpansionState() {
     if (_selectedNodeId == null) return null;
     return _expandedNodes.contains(_selectedNodeId);
+  }
+
+  /// Constrói uma TreeView que mostra nodes do projeto e prompts como irmãos na raiz
+  Widget _buildTreeViewWithMultipleRoots() {
+    // Cria um root virtual invisível que tem os dois roots como filhos
+    final virtualRoot = Node(
+      id: 'virtual-root',
+      name: '',
+    );
+    virtualRoot.addChild(_rootNode);
+    virtualRoot.addChild(_promptsRootNode);
+    
+    // Usa TreeView normal mas precisa construir manualmente para mostrar apenas os filhos
+    // Criando um root combinado temporário só para a TreeView funcionar
+    final combinedRoot = Node(
+      id: 'combined-root',
+      name: '', // Nome vazio faz TreeView ocultar o root e mostrar apenas filhos
+    );
+    combinedRoot.addChild(_rootNode);
+    combinedRoot.addChild(_promptsRootNode);
+    
+    return TreeView(
+      rootNode: combinedRoot,
+      onNodeNameChanged: (nodeId, newName) {
+        // Ignora mudanças no root combinado
+        if (nodeId == 'combined-root') return;
+        // Direciona para o handler correto baseado no tipo de node
+        if (_isPromptNode(nodeId)) {
+          _updatePromptsRootNode(nodeId, newName);
+        } else if (_isProjectNode(nodeId)) {
+          _updateRootNode(nodeId, newName);
+        }
+      },
+      onSelectionChanged: (nodeId) {
+        // Ignora seleção do root combinado
+        if (nodeId == 'combined-root') {
+          _handleSelectionChanged(null);
+          setState(() {
+            _selectedPromptNodeId = null;
+          });
+          return;
+        }
+        // Direciona para o handler correto baseado no tipo de node
+        if (nodeId == null) {
+          _handleSelectionChanged(null);
+          setState(() {
+            _selectedPromptNodeId = null;
+          });
+        } else if (_isPromptNode(nodeId)) {
+          _handlePromptSelectionChanged(nodeId);
+          setState(() {
+            _selectedNodeId = null; // Limpa seleção de nodes
+          });
+        } else if (_isProjectNode(nodeId)) {
+          _handleSelectionChanged(nodeId);
+          setState(() {
+            _selectedPromptNodeId = null; // Limpa seleção de prompts
+          });
+        }
+      },
+      onEditingStateChanged: (isEditing, nodeId) {
+        if (nodeId != null && nodeId != 'combined-root') {
+          if (_isProjectNode(nodeId)) {
+            _handleEditingStateChanged(isEditing, nodeId);
+          }
+          // Para prompts, não precisa de _isEditing separado
+        }
+      },
+      onExpansionChanged: (nodeId, isExpanded) {
+        // Ignora expansão do root combinado
+        if (nodeId == 'combined-root') return;
+        if (_isPromptNode(nodeId)) {
+          _handlePromptExpansionChanged(nodeId, isExpanded);
+        } else if (_isProjectNode(nodeId)) {
+          _handleExpansionChanged(nodeId, isExpanded);
+        }
+      },
+      onNodeReordered: (draggedNodeId, targetNodeId, insertBefore) {
+        // Não permite reordenar os roots principais
+        if (draggedNodeId == _rootNode.id || draggedNodeId == _promptsRootNode.id ||
+            targetNodeId == _rootNode.id || targetNodeId == _promptsRootNode.id) {
+          return;
+        }
+        // Verifica se ambos são do mesmo tipo
+        if (_isPromptNode(draggedNodeId) && _isPromptNode(targetNodeId)) {
+          _handlePromptNodeReordered(draggedNodeId, targetNodeId, insertBefore);
+        } else if (_isProjectNode(draggedNodeId) && _isProjectNode(targetNodeId)) {
+          _handleNodeReordered(draggedNodeId, targetNodeId, insertBefore);
+        }
+        // Não permite mover entre tipos diferentes
+      },
+      onNodeParentChanged: (draggedNodeId, newParentId) {
+        // Não permite mover os roots principais
+        if (draggedNodeId == _rootNode.id || draggedNodeId == _promptsRootNode.id) {
+          return;
+        }
+        // Não permite mover para o root combinado
+        if (newParentId == 'combined-root') {
+          return;
+        }
+        // Verifica se ambos são do mesmo tipo
+        if (_isPromptNode(draggedNodeId) && _isPromptNode(newParentId)) {
+          _handlePromptNodeParentChanged(draggedNodeId, newParentId);
+        } else if (_isProjectNode(draggedNodeId) && _isProjectNode(newParentId)) {
+          _handleNodeParentChanged(draggedNodeId, newParentId);
+        }
+        // Não permite mover entre tipos diferentes
+      },
+      onNodeAdded: (parentNodeId, newNodeId, newNodeName) {
+        // Não permite adicionar filhos ao root combinado
+        if (parentNodeId == 'combined-root') return;
+        if (_isPromptNode(parentNodeId)) {
+          _handlePromptNodeAdded(parentNodeId, newNodeId, newNodeName);
+        } else if (_isProjectNode(parentNodeId)) {
+          _handleNodeAdded(parentNodeId, newNodeId, newNodeName);
+        }
+      },
+      onNodeDeleted: (deletedNodeId) {
+        // Não permite deletar os roots principais
+        if (deletedNodeId == _rootNode.id || deletedNodeId == _promptsRootNode.id) {
+          return;
+        }
+        if (_isPromptNode(deletedNodeId)) {
+          _handlePromptNodeDeleted(deletedNodeId);
+        } else if (_isProjectNode(deletedNodeId)) {
+          _handleNodeDeleted(deletedNodeId);
+        }
+      },
+    );
   }
 
   void _updateRootNode(String nodeId, String newName) async {
@@ -505,6 +739,203 @@ class _MyHomePageState extends State<MyHomePage> {
     );
     
     await _commandHistory.execute(command, _rootNode);
+  }
+
+  // ========== Handlers para Prompts ==========
+  
+  void _updatePromptsRootNode(String nodeId, String newName) {
+    setState(() {
+      _promptsRootNode = _updateNodeInTree(_promptsRootNode, nodeId, newName);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  void _handlePromptSelectionChanged(String? nodeId) {
+    setState(() {
+      _selectedPromptNodeId = nodeId;
+    });
+  }
+
+  void _handlePromptNodeAdded(String parentNodeId, String newNodeId, String newNodeName) {
+    setState(() {
+      // Cria o novo prompt com os campos obrigatórios já preenchidos
+      final newNode = Node(
+        id: newNodeId,
+        name: newNodeName,
+        fields: {
+          'prompt': '', // Campo obrigatório - prompt vazio inicialmente
+          'order': 'start', // Campo obrigatório - padrão 'start'
+          'index': 0, // Campo obrigatório - índice padrão 0
+        },
+        fieldTypes: {
+          'prompt': 'text',
+          'order': 'enum', // Tipo enum para mostrar dropdown
+          'index': 'number',
+        },
+      );
+      
+      // Adiciona o node à árvore de prompts
+      _promptsRootNode = _addPromptNodeToParent(_promptsRootNode, parentNodeId, newNode);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  /// Adiciona um node de prompt a um parent na árvore de prompts
+  Node _addPromptNodeToParent(Node root, String parentNodeId, Node newNode) {
+    if (root.id == parentNodeId) {
+      final newChildren = List<Node>.from(root.children)..add(newNode);
+      return root.copyWith(children: newChildren);
+    }
+    
+    final updatedChildren = root.children
+        .map((child) => _addPromptNodeToParent(child, parentNodeId, newNode))
+        .toList();
+    
+    return root.copyWith(children: updatedChildren);
+  }
+
+  void _handlePromptNodeDeleted(String deletedNodeId) {
+    setState(() {
+      _promptsRootNode = _removeNodeFromTree(_promptsRootNode, deletedNodeId);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  Node _setPromptFieldInTree(Node node, String targetId, String key, dynamic value) {
+    if (node.id == targetId) {
+      final newFields = Map<String, dynamic>.from(node.fields);
+      newFields[key] = value;
+      return node.copyWith(fields: newFields);
+    }
+    final updatedChildren = node.children
+        .map((child) => _setPromptFieldInTree(child, targetId, key, value))
+        .toList();
+    return node.copyWith(children: updatedChildren);
+  }
+
+  Node _removePromptFieldFromTree(Node node, String targetId, String key) {
+    if (node.id == targetId) {
+      final newFields = Map<String, dynamic>.from(node.fields);
+      newFields.remove(key);
+      return node.copyWith(fields: newFields);
+    }
+    final updatedChildren = node.children
+        .map((child) => _removePromptFieldFromTree(child, targetId, key))
+        .toList();
+    return node.copyWith(children: updatedChildren);
+  }
+
+  void _handlePromptFieldChanged(String nodeId, String fieldKey, dynamic newValue) {
+    setState(() {
+      _promptsRootNode = _setPromptFieldInTree(_promptsRootNode, nodeId, fieldKey, newValue);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  void _handlePromptFieldRemoved(String nodeId, String fieldKey) {
+    setState(() {
+      _promptsRootNode = _removePromptFieldFromTree(_promptsRootNode, nodeId, fieldKey);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  void _handlePromptFieldAdded(String nodeId, String fieldKey, dynamic value) {
+    setState(() {
+      _promptsRootNode = _setPromptFieldInTree(_promptsRootNode, nodeId, fieldKey, value);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  void _handlePromptExpansionChanged(String nodeId, bool isExpanded) {
+    setState(() {
+      if (isExpanded) {
+        _expandedPromptNodes.add(nodeId);
+      } else {
+        _expandedPromptNodes.remove(nodeId);
+      }
+    });
+  }
+
+  void _handlePromptNodeReordered(String draggedNodeId, String targetNodeId, bool insertBefore) {
+    setState(() {
+      _promptsRootNode = _reorderNodeInTree(
+        _promptsRootNode,
+        draggedNodeId,
+        targetNodeId,
+        insertBefore,
+      );
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
+  }
+
+  void _handlePromptNodeParentChanged(String draggedNodeId, String newParentId) {
+    // Implementação usando MoveNodeCommand seria ideal, mas por simplicidade
+    // vamos usar uma abordagem direta para prompts
+    final oldParent = Node.findParent(_promptsRootNode, draggedNodeId);
+    if (oldParent == null) return;
+    
+    final draggedNode = _promptsRootNode.findById(draggedNodeId);
+    if (draggedNode == null) return;
+    
+    // Remove do parent antigo
+    final oldParentUpdated = oldParent.removeChildById(draggedNodeId);
+    
+    // Adiciona ao novo parent
+    final newParentNode = _promptsRootNode.findById(newParentId);
+    if (newParentNode == null) return;
+    
+    Node addToNewParent(Node node) {
+      if (node.id == newParentId) {
+        return node.insertChild(node.children.length, draggedNode);
+      }
+      return node.copyWith(
+        children: node.children.map((child) => addToNewParent(child)).toList(),
+      );
+    }
+    
+    // Atualiza a árvore removendo do antigo e adicionando ao novo
+    Node updateTree(Node node) {
+      if (node.id == oldParent.id) {
+        return oldParentUpdated.copyWith(
+          children: node.children.map((child) => updateTree(child)).toList(),
+        );
+      }
+      if (node.id == newParentId) {
+        return addToNewParent(node);
+      }
+      return node.copyWith(
+        children: node.children.map((child) => updateTree(child)).toList(),
+      );
+    }
+    
+    setState(() {
+      _promptsRootNode = updateTree(_promptsRootNode);
+    });
+    // Salva automaticamente se tiver projeto aberto
+    if (_currentProjectPath != null) {
+      PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
+    }
   }
 
   Node _updateNodeInTree(Node node, String nodeId, String newName) {
@@ -727,6 +1158,9 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    // Salva prompts (estrutura de nodes)
+    await PromptStorageService.savePrompts(projectPath, _promptsRootNode);
+
     // Adiciona à lista de projetos recentes
     await Preferences.addRecentProject(projectPath, projectName);
 
@@ -777,12 +1211,16 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    // Carrega prompts (estrutura de nodes)
+    final promptsRoot = await PromptStorageService.loadPrompts(projectPath);
+
     // Adiciona à lista de projetos recentes
     await Preferences.addRecentProject(projectPath, loadedNode.name);
 
     // Atualiza estado
     setState(() {
       _rootNode = loadedNode;
+      _promptsRootNode = promptsRoot;
       _currentProjectPath = projectPath;
       _hasUnsavedChanges = false;
       _showWelcomeScreen = false;
@@ -824,12 +1262,16 @@ class _MyHomePageState extends State<MyHomePage> {
       return;
     }
 
+    // Carrega prompts (estrutura de nodes)
+    final promptsRoot = await PromptStorageService.loadPrompts(projectPath);
+
     // Adiciona à lista de projetos recentes (move para o topo)
     await Preferences.addRecentProject(projectPath, loadedNode.name);
 
     // Atualiza estado
     setState(() {
       _rootNode = loadedNode;
+      _promptsRootNode = promptsRoot;
       _currentProjectPath = projectPath;
       _hasUnsavedChanges = false;
       _showWelcomeScreen = false;
@@ -926,6 +1368,9 @@ class _MyHomePageState extends State<MyHomePage> {
         return;
       }
 
+      // Salva prompts (estrutura de nodes)
+      await PromptStorageService.savePrompts(projectPath, _promptsRootNode);
+
       // Adiciona à lista de projetos recentes
       await Preferences.addRecentProject(projectPath, projectName);
 
@@ -950,6 +1395,9 @@ class _MyHomePageState extends State<MyHomePage> {
         }
         return;
       }
+
+      // Salva prompts (estrutura de nodes)
+      await PromptStorageService.savePrompts(_currentProjectPath!, _promptsRootNode);
 
       setState(() {
         _hasUnsavedChanges = false;
@@ -1188,11 +1636,8 @@ class _MyHomePageState extends State<MyHomePage> {
       LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
     };
     
-    // Só adiciona shortcut 'n' quando NÃO está editando
-    // Isso permite que a letra 'n' seja digitada normalmente em TextFields
-    if (!_isEditing) {
-      shortcuts[LogicalKeySet(LogicalKeyboardKey.keyN)] = const _AddNodeGlobalIntent();
-    }
+    // Atalho Control+N para criar novo node - sempre disponível
+    shortcuts[LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyN)] = const _AddNodeGlobalIntent();
     
     return Shortcuts(
       shortcuts: shortcuts,
@@ -1236,19 +1681,18 @@ class _MyHomePageState extends State<MyHomePage> {
           ),
           _AddNodeGlobalIntent: CallbackAction<_AddNodeGlobalIntent>(
             onInvoke: (_) {
-              print('⌨️ [Main] N PRESSIONADO GLOBALMENTE');
+              print('⌨️ [Main] CTRL+N PRESSIONADO GLOBALMENTE');
               print('   _isEditing: $_isEditing');
               print('   _selectedNodeId: $_selectedNodeId');
+              print('   _selectedPromptNodeId: $_selectedPromptNodeId');
               print('   _showWindow: $_showWindow');
               
-              // Este callback só será chamado se o shortcut existir,
-              // e o shortcut só existe quando !_isEditing (definido no build)
-              // Mas ainda verificamos por segurança
-              if (!_isEditing && _selectedNodeId != null && _showWindow) {
-                print('✅ [Main] Condições OK, adicionando node');
+              // Verifica condições: não pode estar editando e precisa ter um node ou prompt selecionado
+              if (!_isEditing && _showWindow && (_selectedNodeId != null || _selectedPromptNodeId != null)) {
+                print('✅ [Main] Condições OK, adicionando node/prompt');
                 _handleAddNodeShortcut();
               } else {
-                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _showWindow=$_showWindow');
+                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _selectedPromptNodeId=$_selectedPromptNodeId, _showWindow=$_showWindow');
               }
               return null;
             },
@@ -1259,6 +1703,7 @@ class _MyHomePageState extends State<MyHomePage> {
               print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
               print('   _isEditing: $_isEditing');
               print('   _selectedNodeId: $_selectedNodeId');
+              print('   _selectedPromptNodeId: $_selectedPromptNodeId');
               print('   _showWindow: $_showWindow');
               developer.log('Main: Delete pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing');
               
@@ -1268,12 +1713,12 @@ class _MyHomePageState extends State<MyHomePage> {
               print('   focusedChild: ${focusedChild?.runtimeType}');
               developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
               
-              // Só deleta se não estiver editando e houver um node selecionado
-              if (!_isEditing && _selectedNodeId != null && _showWindow) {
-                print('✅ [Main] Condições OK, deletando node');
+              // Só deleta se não estiver editando e houver um node ou prompt selecionado
+              if (!_isEditing && _showWindow && (_selectedNodeId != null || _selectedPromptNodeId != null)) {
+                print('✅ [Main] Condições OK, deletando node/prompt');
                 _handleDeleteNodeShortcut();
               } else {
-                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _showWindow=$_showWindow');
+                print('❌ [Main] Condições não atendidas: _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId, _selectedPromptNodeId=$_selectedPromptNodeId, _showWindow=$_showWindow');
               }
               return null;
             },
@@ -1410,18 +1855,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           // Removido onTap para permitir que o TreeView mantenha o foco e capture F2
-                          child: TreeView(
-                            rootNode: _rootNode,
-                            onNodeNameChanged: _updateRootNode,
-                            onSelectionChanged: _handleSelectionChanged,
-                            onEditingStateChanged: _handleEditingStateChanged,
-                            onExpansionChanged: _handleExpansionChanged,
-                            onNodeReordered: _handleNodeReordered,
-                            onNodeParentChanged: _handleNodeParentChanged,
-                            onNodeAdded: _handleNodeAdded,
-                            onNodeDeleted: _handleNodeDeleted,
-                            // onUndo e onRedo removidos - agora são gerenciados globalmente
-                          ),
+                          child: _buildTreeViewWithMultipleRoots(),
                         ),
                       // Janela flutuante com ActionsPanel (sempre visível)
                       if (_showActionsWindow)
@@ -1478,23 +1912,46 @@ class _MyHomePageState extends State<MyHomePage> {
                             }
                           },
                           child: DocumentEditor(
-                            selectedNode: _getSelectedNode(),
-                            onFieldChanged: _handleFieldChanged,
-                            onFieldRemoved: _handleFieldRemoved,
-                            onFieldAdded: _handleFieldAdded,
-                            onFieldTypesChanged: _handleFieldTypesChanged,
+                            selectedNode: _getSelectedNode() ?? _getSelectedPromptNode(),
+                            onFieldChanged: (nodeId, fieldKey, fieldValue) {
+                              if (_isPromptNode(nodeId)) {
+                                _handlePromptFieldChanged(nodeId, fieldKey, fieldValue);
+                              } else if (_isProjectNode(nodeId)) {
+                                _handleFieldChanged(nodeId, fieldKey, fieldValue);
+                              }
+                            },
+                            onFieldRemoved: (nodeId, fieldKey) {
+                              if (_isPromptNode(nodeId)) {
+                                _handlePromptFieldRemoved(nodeId, fieldKey);
+                              } else if (_isProjectNode(nodeId)) {
+                                _handleFieldRemoved(nodeId, fieldKey);
+                              }
+                            },
+                            onFieldAdded: (nodeId, fieldKey, value) {
+                              if (_isPromptNode(nodeId)) {
+                                _handlePromptFieldAdded(nodeId, fieldKey, value);
+                              } else if (_isProjectNode(nodeId)) {
+                                _handleFieldAdded(nodeId, fieldKey, value);
+                              }
+                            },
+                            onFieldTypesChanged: (nodeId, fieldTypes) {
+                              if (_isProjectNode(nodeId)) {
+                                _handleFieldTypesChanged(nodeId, fieldTypes);
+                              }
+                              // Para prompts, não precisa de fieldTypes separado
+                            },
                             mainAppFocusNode: _mainFocusNode,
                             projectPath: _currentProjectPath,
                           ),
                         ),
-                      // Janela Composer - mostra informações do node selecionado
+                      // Janela Prompt Composer - seleção múltipla e formatação para LLM
                       if (_showComposerWindow)
                         DraggableResizableWindow(
-                          key: const ValueKey('composer_window'),
-                          title: 'Composer',
-                          initialWidth: 500,
+                          key: ValueKey('composer_window_${_rootNode.id}_${_promptsRootNode.id}'),
+                          title: 'Prompt Composer',
+                          initialWidth: 800,
                           initialHeight: 600,
-                          minWidth: 400,
+                          minWidth: 600,
                           minHeight: 400,
                           initialPosition: const Offset(1250, 50),
                           onClose: () {
@@ -1503,7 +1960,10 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           child: ComposerWindow(
-                            selectedNode: _getSelectedNode(),
+                            key: ValueKey('composer_${_rootNode.id}_${_promptsRootNode.id}'),
+                            rootNode: _rootNode,
+                            promptsRootNode: _promptsRootNode,
+                            projectPath: _currentProjectPath,
                           ),
                         ),
                       // Indicador de status do Git no canto inferior direito
