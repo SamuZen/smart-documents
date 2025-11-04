@@ -110,7 +110,10 @@ class ProjectService {
 
       final file = File('${directory.path}/$projectFileName');
       final jsonData = rootNode.toJson();
-      final jsonString = jsonEncode(jsonData);
+      
+      // Usa JsonEncoder com indentação para facilitar edição e visualização no git
+      const encoder = JsonEncoder.withIndent('  '); // 2 espaços de indentação
+      final jsonString = encoder.convert(jsonData);
 
       await file.writeAsString(jsonString, encoding: utf8);
 
