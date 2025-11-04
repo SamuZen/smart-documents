@@ -26,6 +26,7 @@ import 'commands/set_node_field_command.dart';
 import 'commands/remove_node_field_command.dart';
 import 'theme/app_theme.dart';
 import 'widgets/git_status_indicator.dart';
+import 'widgets/composer_window.dart';
 
 void main() {
   runApp(const MyApp());
@@ -59,6 +60,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _showWindow = true;
   bool _showActionsWindow = true;
   bool _showDocumentEditor = true;
+  bool _showComposerWindow = false;
   String? _selectedNodeId;
   bool _isEditing = false;
   final Set<String> _expandedNodes = {}; // Rastreia nodes expandidos
@@ -1330,9 +1332,15 @@ class _MyHomePageState extends State<MyHomePage> {
                 _showDocumentEditor = !_showDocumentEditor;
               });
             },
+            onToggleComposer: () {
+              setState(() {
+                _showComposerWindow = !_showComposerWindow;
+              });
+            },
             showNavigation: _showWindow,
             showActions: _showActionsWindow,
             showDocumentEditor: _showDocumentEditor,
+            showComposer: _showComposerWindow,
           ),
           // Conteúdo principal
           Expanded(
@@ -1461,6 +1469,25 @@ class _MyHomePageState extends State<MyHomePage> {
                             onFieldAdded: _handleFieldAdded,
                             mainAppFocusNode: _mainFocusNode,
                             projectPath: _currentProjectPath,
+                          ),
+                        ),
+                      // Janela Composer - mostra informações do node selecionado
+                      if (_showComposerWindow)
+                        DraggableResizableWindow(
+                          key: const ValueKey('composer_window'),
+                          title: 'Composer',
+                          initialWidth: 500,
+                          initialHeight: 600,
+                          minWidth: 400,
+                          minHeight: 400,
+                          initialPosition: const Offset(1250, 50),
+                          onClose: () {
+                            setState(() {
+                              _showComposerWindow = false;
+                            });
+                          },
+                          child: ComposerWindow(
+                            selectedNode: _getSelectedNode(),
                           ),
                         ),
                       // Indicador de status do Git no canto inferior direito
