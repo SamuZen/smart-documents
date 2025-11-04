@@ -46,6 +46,10 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
       _history.insert(0, execution);
       // Ordena por timestamp (mais recente primeiro)
       _history.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      // Atualiza estado de loading se necessário
+      if (_isLoading) {
+        _isLoading = false;
+      }
     });
   }
 
@@ -172,6 +176,11 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
                   ),
                 ),
                 const Spacer(),
+                // Totais acumulados
+                if (!_isLoading && _history.isNotEmpty) ...[
+                  _buildTotalBadge(),
+                  const SizedBox(width: 12),
+                ],
                 IconButton(
                   icon: const Icon(Icons.refresh, size: 18),
                   onPressed: _loadHistory,
@@ -374,6 +383,71 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
     }
   }
 
+  Widget _buildTotalBadge() {
+    final totals = _calculateTotals();
+    final totalTokens = totals['tokens'] as int;
+    final totalCost = totals['cost'] as double;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.neonBlue.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppTheme.neonBlue.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.analytics,
+            size: 14,
+            color: AppTheme.neonBlue,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            'Total: ${_formatNumber(totalTokens)} tokens',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.neonBlue,
+            ),
+          ),
+          if (totalCost > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '•',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.textTertiary,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '\$${totalCost.toStringAsFixed(4)}',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.neonCyan,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1_000_000) {
+      return '${(number / 1_000_000).toStringAsFixed(2)}M';
+    } else if (number >= 1_000) {
+      return '${(number / 1_000).toStringAsFixed(2)}K';
+    }
+    return number.toString();
+  }
+
   String _truncatePrompt(String prompt) {
     if (prompt.length <= 100) return prompt;
     return '${prompt.substring(0, 100)}...';
@@ -393,6 +467,26 @@ class _LLMHistoryWindowState extends State<LLMHistoryWindow> {
     } else {
       return '$total tokens';
     }
+  }
+
+  /// Calcula totais acumulados (tokens e custo)
+  Map<String, dynamic> _calculateTotals() {
+    int totalTokens = 0;
+    double totalCost = 0.0;
+
+    for (final execution in _history) {
+      if (execution.tokensUsed != null) {
+        totalTokens += execution.tokensUsed!;
+      }
+      if (execution.cost != null) {
+        totalCost += execution.cost!;
+      }
+    }
+
+    return {
+      'tokens': totalTokens,
+      'cost': totalCost,
+    };
   }
 }
 

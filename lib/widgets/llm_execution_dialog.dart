@@ -4,6 +4,7 @@ import '../models/llm_model.dart';
 import '../services/llm_service.dart';
 import '../services/settings_service.dart';
 import '../services/llm_history_service.dart';
+import '../services/llm_pricing_service.dart';
 import '../models/llm_execution_history.dart';
 import '../theme/app_theme.dart';
 import 'llm_result_dialog.dart';
@@ -154,6 +155,15 @@ class _LLMExecutionDialogState extends State<LLMExecutionDialog> {
         apiKey: apiKey,
       );
 
+      // Calcula custo baseado nos tokens
+      final promptTokens = response.metadata['prompt_tokens'] as int?;
+      final completionTokens = response.metadata['completion_tokens'] as int?;
+      final calculatedCost = LLMPricingService.calculateCost(
+        _selectedModel!.fullName,
+        promptTokens,
+        completionTokens,
+      );
+
       // Salva no histórico
       final history = LLMExecutionHistory.create(
         provider: _selectedProvider!,
@@ -163,6 +173,7 @@ class _LLMExecutionDialogState extends State<LLMExecutionDialog> {
         metadata: {
           ...response.metadata,
           'provider': _selectedProvider!.toJson(),
+          if (calculatedCost != null) 'cost': calculatedCost,
         },
       );
 
