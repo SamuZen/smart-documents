@@ -755,30 +755,51 @@ class _TreeViewState extends State<TreeView> {
 
   /// Navega para o próximo node (seta para baixo)
   void _navigateDown() {
+    print('📍 [TreeView] _navigateDown() chamado');
+    print('   _editingNodeId: $_editingNodeId');
+    
     // Não navega se estiver editando
     if (_editingNodeId != null) {
+      print('   ❌ Cancelando navegação: está editando');
       return;
     }
     
     final visibleNodes = _getVisibleNodes();
-    if (visibleNodes.isEmpty) return;
+    print('   Nodes visíveis: ${visibleNodes.length}');
+    for (int i = 0; i < visibleNodes.length; i++) {
+      print('     [$i] ${visibleNodes[i].id} - ${visibleNodes[i].name}');
+    }
+    
+    if (visibleNodes.isEmpty) {
+      print('   ❌ Nenhum node visível');
+      return;
+    }
     
     if (_selectedNodeId == null) {
       // Se nenhum node está selecionado, seleciona o primeiro
+      print('   ✅ Nenhum node selecionado, selecionando o primeiro: ${visibleNodes.first.id}');
       _selectNode(visibleNodes.first.id);
       return;
     }
     
+    print('   Node selecionado atual: $_selectedNodeId');
     final currentIndex = _getNodeIndex(_selectedNodeId!);
+    print('   Índice atual: $currentIndex');
+    
     if (currentIndex == -1) {
       // Node não encontrado, seleciona o primeiro
+      print('   ⚠️ Node não encontrado na lista visível, selecionando o primeiro');
       _selectNode(visibleNodes.first.id);
       return;
     }
     
     if (currentIndex < visibleNodes.length - 1) {
       // Move para o próximo node
-      _selectNode(visibleNodes[currentIndex + 1].id);
+      final nextNodeId = visibleNodes[currentIndex + 1].id;
+      print('   ✅ Movendo para o próximo node: $nextNodeId (índice ${currentIndex + 1})');
+      _selectNode(nextNodeId);
+    } else {
+      print('   ℹ️ Já está no último node, mantendo seleção');
     }
     // Se estiver no último, mantém seleção
   }
@@ -924,7 +945,42 @@ class _TreeViewState extends State<TreeView> {
         // A edição será cancelada apenas quando clicar na área vazia da janela
       },
       onKeyEvent: (node, event) {
-        print('⌨️ [TreeView] onKeyEvent chamado: ${event.runtimeType}, key: ${event.logicalKey}');
+        // Processa setas diretamente aqui, já que os Shortcuts não estão funcionando
+        if (event is KeyDownEvent) {
+          final key = event.logicalKey;
+          
+          // Processa setas diretamente
+          if (key == LogicalKeyboardKey.arrowUp) {
+            print('⌨️ [TreeView] SETA PARA CIMA pressionada (via onKeyEvent)');
+            if (_editingNodeId == null) {
+              _navigateUp();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          }
+          
+          if (key == LogicalKeyboardKey.arrowDown) {
+            print('⌨️ [TreeView] SETA PARA BAIXO pressionada (via onKeyEvent)');
+            if (_editingNodeId == null) {
+              _navigateDown();
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          }
+          
+          if (key == LogicalKeyboardKey.arrowLeft && _editingNodeId == null) {
+            print('⌨️ [TreeView] SETA PARA ESQUERDA pressionada (via onKeyEvent)');
+            _collapseSelected();
+            return KeyEventResult.handled;
+          }
+          
+          if (key == LogicalKeyboardKey.arrowRight && _editingNodeId == null) {
+            print('⌨️ [TreeView] SETA PARA DIREITA pressionada (via onKeyEvent)');
+            _expandSelected();
+            return KeyEventResult.handled;
+          }
+        }
+        
         // Captura F2 diretamente aqui para garantir que funcione
         if (event is KeyDownEvent && event.logicalKey == LogicalKeyboardKey.f2) {
           print('⌨️ [TreeView] F2 PRESSIONADO (via onKeyEvent)');
@@ -942,6 +998,7 @@ class _TreeViewState extends State<TreeView> {
           }
           return KeyEventResult.handled;
         }
+        // Para todos os outros eventos, ignora para que possam ser processados por outros widgets
         return KeyEventResult.ignored;
       },
       child: Shortcuts(
@@ -1001,14 +1058,29 @@ class _TreeViewState extends State<TreeView> {
           _ArrowUpIntent: CallbackAction<_ArrowUpIntent>(
             onInvoke: (_) {
               print('⌨️ [TreeView] SETA PARA CIMA pressionada');
+              print('   _treeFocusNode.hasFocus: ${_treeFocusNode.hasFocus}');
+              // Garante que o TreeView tem foco
+              if (!_treeFocusNode.hasFocus) {
+                _treeFocusNode.requestFocus();
+              }
               _navigateUp();
               return null;
             },
           ),
           _ArrowDownIntent: CallbackAction<_ArrowDownIntent>(
             onInvoke: (_) {
-              print('⌨️ [TreeView] SETA PARA BAIXO pressionada');
+              print('⌨️ [TreeView] SETA PARA BAIXO pressionada - ACTION EXECUTADA');
+              print('   _treeFocusNode.hasFocus: ${_treeFocusNode.hasFocus}');
+              print('   _selectedNodeId ANTES: $_selectedNodeId');
+              print('   _editingNodeId: $_editingNodeId');
+              // Garante que o TreeView tem foco
+              if (!_treeFocusNode.hasFocus) {
+                print('   ⚠️ TreeView não tinha foco, solicitando...');
+                _treeFocusNode.requestFocus();
+              }
+              print('   Chamando _navigateDown()...');
               _navigateDown();
+              print('   _selectedNodeId DEPOIS: $_selectedNodeId');
               return null;
             },
           ),

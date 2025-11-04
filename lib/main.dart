@@ -1016,62 +1016,28 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<void> _handleUndo() async {
     final affectedNodeId = await _commandHistory.undo(_rootNode);
     
-    // Se houver um node afetado, seleciona e foca nele
-    if (affectedNodeId != null) {
-      // Aguarda o setState ser processado antes de selecionar
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _selectedNodeId = affectedNodeId;
-          });
-          // Notifica mudança de seleção para atualizar o TreeView
-          _handleSelectionChanged(affectedNodeId);
-          
-          // Garante que o TreeView recebe foco para que F2 funcione
-          if (_showWindow) {
-            // Aguarda mais um frame para garantir que o TreeView foi atualizado
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                // Solicita foco no TreeView (será feito automaticamente quando clicar, mas aqui garantimos)
-                final focusScope = FocusScope.of(context);
-                focusScope.unfocus(); // Remove foco atual
-                // O TreeView vai receber foco automaticamente quando o node for selecionado
-              }
-            });
-          }
-        }
+    // Se houver um node afetado, apenas seleciona (sem mexer no foco)
+    // O foco será mantido onde está, permitindo múltiplos undos consecutivos
+    if (affectedNodeId != null && mounted) {
+      setState(() {
+        _selectedNodeId = affectedNodeId;
       });
+      // Notifica mudança de seleção para atualizar o TreeView
+      _handleSelectionChanged(affectedNodeId);
     }
   }
 
   Future<void> _handleRedo() async {
     final affectedNodeId = await _commandHistory.redo(_rootNode);
     
-    // Se houver um node afetado, seleciona e foca nele
-    if (affectedNodeId != null) {
-      // Aguarda o setState ser processado antes de selecionar
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _selectedNodeId = affectedNodeId;
-          });
-          // Notifica mudança de seleção para atualizar o TreeView
-          _handleSelectionChanged(affectedNodeId);
-          
-          // Garante que o TreeView recebe foco para que F2 funcione
-          if (_showWindow) {
-            // Aguarda mais um frame para garantir que o TreeView foi atualizado
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                // Solicita foco no TreeView (será feito automaticamente quando clicar, mas aqui garantimos)
-                final focusScope = FocusScope.of(context);
-                focusScope.unfocus(); // Remove foco atual
-                // O TreeView vai receber foco automaticamente quando o node for selecionado
-              }
-            });
-          }
-        }
+    // Se houver um node afetado, apenas seleciona (sem mexer no foco)
+    // O foco será mantido onde está, permitindo múltiplos redos consecutivos
+    if (affectedNodeId != null && mounted) {
+      setState(() {
+        _selectedNodeId = affectedNodeId;
       });
+      // Notifica mudança de seleção para atualizar o TreeView
+      _handleSelectionChanged(affectedNodeId);
     }
   }
 
@@ -1192,19 +1158,26 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     // Atalhos globais - sempre funcionam, mesmo com TextFields focados
-    // Usa excludeMode: true para garantir que comandos funcionem mesmo quando editando
+    // IMPORTANTE: O shortcut 'n' só é adicionado quando NÃO está editando
+    // para não interferir na digitação de texto em TextFields
+    final shortcuts = <LogicalKeySet, Intent>{
+      // Undo/Redo - sempre disponíveis
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _GlobalUndoIntent(),
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _GlobalRedoIntent(),
+      LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _GlobalRedoIntent(),
+      // Deletar node - só funciona quando não está editando
+      // Apenas DEL (Delete), não Backspace
+      LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
+    };
+    
+    // Só adiciona shortcut 'n' quando NÃO está editando
+    // Isso permite que a letra 'n' seja digitada normalmente em TextFields
+    if (!_isEditing) {
+      shortcuts[LogicalKeySet(LogicalKeyboardKey.keyN)] = const _AddNodeGlobalIntent();
+    }
+    
     return Shortcuts(
-      shortcuts: {
-        // Undo/Redo - sempre disponíveis
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyZ): const _GlobalUndoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyY): const _GlobalRedoIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift, LogicalKeyboardKey.keyZ): const _GlobalRedoIntent(),
-        // Adicionar node - só funciona quando não está editando
-        LogicalKeySet(LogicalKeyboardKey.keyN): const _AddNodeGlobalIntent(),
-        // Deletar node - só funciona quando não está editando
-        // Apenas DEL (Delete), não Backspace
-        LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
-      },
+      shortcuts: shortcuts,
       child: Actions(
         actions: {
           _GlobalUndoIntent: CallbackAction<_GlobalUndoIntent>(
@@ -1246,19 +1219,13 @@ class _MyHomePageState extends State<MyHomePage> {
           _AddNodeGlobalIntent: CallbackAction<_AddNodeGlobalIntent>(
             onInvoke: (_) {
               print('⌨️ [Main] N PRESSIONADO GLOBALMENTE');
-              print('   _mainFocusNode.hasFocus: ${_mainFocusNode.hasFocus}');
               print('   _isEditing: $_isEditing');
               print('   _selectedNodeId: $_selectedNodeId');
               print('   _showWindow: $_showWindow');
-              developer.log('Main: N pressionado globalmente. hasFocus=${_mainFocusNode.hasFocus}, _isEditing=$_isEditing, _selectedNodeId=$_selectedNodeId');
               
-              // Verifica o foco atual
-              final focusScope = FocusScope.of(context);
-              final focusedChild = focusScope.focusedChild;
-              print('   focusedChild: ${focusedChild?.runtimeType}');
-              developer.log('Main: focusedChild=${focusedChild?.runtimeType}');
-              
-              // Só adiciona node se não estiver editando e houver um node selecionado
+              // Este callback só será chamado se o shortcut existir,
+              // e o shortcut só existe quando !_isEditing (definido no build)
+              // Mas ainda verificamos por segurança
               if (!_isEditing && _selectedNodeId != null && _showWindow) {
                 print('✅ [Main] Condições OK, adicionando node');
                 _handleAddNodeShortcut();
@@ -1296,13 +1263,14 @@ class _MyHomePageState extends State<MyHomePage> {
         },
         child: Focus(
           focusNode: _mainFocusNode,
-          autofocus: true,
+          autofocus: false, // Desativado para não interferir com TreeView
+          skipTraversal: false,
           onFocusChange: (hasFocus) {
             print('🔍 [Main] Foco principal mudou: hasFocus=$hasFocus');
             developer.log('Main: Foco principal mudou. hasFocus=$hasFocus');
             
-            // Se o foco principal foi perdido e não há outro foco ativo,
-            // tenta recuperá-lo após um pequeno delay
+            // NÃO tenta recuperar foco automaticamente - deixa outros widgets (como TreeView) manterem o foco
+            // Isso evita conflitos com widgets que precisam de foco para processar teclas (setas, etc)
             if (!hasFocus) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 // Verifica se nenhum outro widget tem foco
@@ -1311,13 +1279,16 @@ class _MyHomePageState extends State<MyHomePage> {
                 print('🔍 [Main] Verificando foco após perder: focusedChild=${focusedChild?.runtimeType}');
                 developer.log('Main: Verificando foco após perder. focusedChild=${focusedChild?.runtimeType}');
                 
+                // Só recupera foco se realmente não há nenhum widget focado
+                // E se não for um TreeView (que precisa manter o foco para processar setas)
                 if (focusedChild == null && mounted) {
                   print('✅ [Main] Nenhum widget focado, recuperando foco principal');
                   developer.log('Main: Nenhum widget focado, recuperando foco principal');
                   _mainFocusNode.requestFocus();
-                } else {
-                  print('⚠️ [Main] Outro widget está focado: ${focusedChild?.runtimeType}');
-                  developer.log('Main: Outro widget está focado: ${focusedChild?.runtimeType}');
+                } else if (focusedChild != null) {
+                  print('⚠️ [Main] Outro widget está focado: ${focusedChild.runtimeType}');
+                  print('   Não recuperando foco para evitar conflitos');
+                  developer.log('Main: Outro widget está focado: ${focusedChild.runtimeType}');
                 }
               });
             } else {
