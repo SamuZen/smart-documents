@@ -23,6 +23,7 @@ class DocumentEditor extends StatefulWidget {
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldChanged;
   final Function(String nodeId, String fieldKey) onFieldRemoved;
   final Function(String nodeId, String fieldKey, dynamic fieldValue) onFieldAdded;
+  final Function(String nodeId, Map<String, String> fieldTypes) onFieldTypesChanged;
   final FocusNode? mainAppFocusNode;
   final String? projectPath; // Caminho do projeto para salvar imagens
 
@@ -32,6 +33,7 @@ class DocumentEditor extends StatefulWidget {
     required this.onFieldChanged,
     required this.onFieldRemoved,
     required this.onFieldAdded,
+    required this.onFieldTypesChanged,
     this.mainAppFocusNode,
     this.projectPath,
   });
@@ -55,37 +57,26 @@ class _DocumentEditorState extends State<DocumentEditor> {
   String? _editingFieldKey; // Key do campo sendo editado
   final TextEditingController _editingKeyController = TextEditingController();
 
-  // Chave especial para armazenar metadados de tipos de campos
-  static const String _fieldTypesKey = '__fieldTypes__';
-
-  /// Carrega os tipos de campos dos metadados do node
+  /// Carrega os tipos de campos do campo fieldTypes do node
   Map<String, String> _loadFieldTypes() {
     if (widget.selectedNode == null) return {};
-    final fields = widget.selectedNode!.fields;
-    final typesData = fields[_fieldTypesKey];
-    if (typesData is Map) {
-      return Map<String, String>.from(typesData.map((k, v) => MapEntry(k.toString(), v.toString())));
-    }
-    return {};
+    // Agora fieldTypes é um campo separado do node, não mais dentro de fields
+    return Map<String, String>.from(widget.selectedNode!.fieldTypes);
   }
 
-  /// Salva o tipo de um campo específico nos metadados
+  /// Salva o tipo de um campo específico no campo fieldTypes do node
   void _saveFieldType(String key, String type) {
     if (widget.selectedNode == null) return;
     
     // Atualiza o tipo localmente
     _fieldTypes[key] = type;
     
-    // Salva nos metadados do node através de um campo especial
-    final currentFields = Map<String, dynamic>.from(widget.selectedNode!.fields);
-    final typesData = currentFields[_fieldTypesKey];
-    final typesMap = typesData is Map 
-        ? Map<String, dynamic>.from(typesData)
-        : <String, dynamic>{};
-    typesMap[key] = type;
+    // Salva no campo fieldTypes do node usando o callback dedicado
+    final updatedFieldTypes = Map<String, String>.from(widget.selectedNode!.fieldTypes);
+    updatedFieldTypes[key] = type;
     
-    // Salva os metadados usando onFieldChanged para que sejam persistidos
-    widget.onFieldChanged(widget.selectedNode!.id, _fieldTypesKey, typesMap);
+    // Usa o callback dedicado para atualizar fieldTypes
+    widget.onFieldTypesChanged(widget.selectedNode!.id, updatedFieldTypes);
   }
 
   @override
@@ -174,7 +165,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
     }
     
     // Remove controllers de campos que não existem mais
-    final keysToRemove = _controllers.keys.where((key) => !newFields.containsKey(key) || key == _fieldTypesKey).toList();
+    final keysToRemove = _controllers.keys.where((key) => !newFields.containsKey(key)).toList();
     for (final key in keysToRemove) {
       _controllers[key]?.dispose();
       _controllers.remove(key);
@@ -187,9 +178,6 @@ class _DocumentEditorState extends State<DocumentEditor> {
     
     // Atualiza ou cria controllers para campos existentes
     newFields.forEach((key, value) {
-      // Ignora o campo de metadados
-      if (key == _fieldTypesKey) return;
-      
       final isEditing = _focusNodes[key]?.hasFocus ?? false;
       
       if (_controllers.containsKey(key)) {
@@ -811,7 +799,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                     )
                   else
-                    ...fields.entries.where((entry) => entry.key != _fieldTypesKey).map((entry) {
+                    ...fields.entries.map((entry) {
                       final key = entry.key;
                       final value = entry.value;
                       // IMPORTANTE: Preserva o tipo se já existe, senão tenta detectar

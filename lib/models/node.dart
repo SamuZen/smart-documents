@@ -3,14 +3,17 @@ class Node {
   final String name;
   final List<Node> children;
   final Map<String, dynamic> fields; // Campos personalizados do documento
+  final Map<String, String> fieldTypes; // Tipos dos campos (irmão de fields)
 
   Node({
     required this.id,
     required this.name,
     List<Node>? children,
     Map<String, dynamic>? fields,
+    Map<String, String>? fieldTypes,
   }) : children = children ?? [],
-       fields = fields ?? {};
+       fields = fields ?? {},
+       fieldTypes = fieldTypes ?? {};
 
   /// Verifica se o node é uma folha (não tem filhos)
   bool get isLeaf => children.isEmpty;
@@ -136,12 +139,14 @@ class Node {
     String? name,
     List<Node>? children,
     Map<String, dynamic>? fields,
+    Map<String, String>? fieldTypes,
   }) {
     return Node(
       id: id ?? this.id,
       name: name ?? this.name,
       children: children ?? this.children.map((e) => e.copyWith()).toList(),
       fields: fields ?? Map<String, dynamic>.from(this.fields),
+      fieldTypes: fieldTypes ?? Map<String, String>.from(this.fieldTypes),
     );
   }
 
@@ -152,12 +157,19 @@ class Node {
       fields.entries.where((entry) => entry.value != null),
     );
     
-    return {
+    final json = {
       'id': id,
       'name': name,
       'children': children.map((child) => child.toJson()).toList(),
       'fields': cleanedFields,
     };
+    
+    // Adiciona fieldTypes apenas se não estiver vazio
+    if (fieldTypes.isNotEmpty) {
+      json['fieldTypes'] = fieldTypes;
+    }
+    
+    return json;
   }
 
   /// Cria um Node a partir de JSON
@@ -168,12 +180,38 @@ class Node {
         .toList();
 
     final fieldsJson = json['fields'] as Map<String, dynamic>? ?? {};
+    
+    // Carrega fieldTypes do campo separado, ou migra de __fieldTypes__ se existir
+    Map<String, String> fieldTypesMap = {};
+    
+    // Primeiro, tenta carregar do campo fieldTypes (novo formato)
+    if (json['fieldTypes'] != null) {
+      final fieldTypesJson = json['fieldTypes'] as Map<String, dynamic>?;
+      if (fieldTypesJson != null) {
+        fieldTypesMap = Map<String, String>.from(
+          fieldTypesJson.map((k, v) => MapEntry(k.toString(), v.toString())),
+        );
+      }
+    }
+    
+    // Se não encontrou em fieldTypes, tenta migrar de __fieldTypes__ (formato antigo)
+    if (fieldTypesMap.isEmpty && fieldsJson.containsKey('__fieldTypes__')) {
+      final oldFieldTypes = fieldsJson['__fieldTypes__'];
+      if (oldFieldTypes is Map) {
+        fieldTypesMap = Map<String, String>.from(
+          oldFieldTypes.map((k, v) => MapEntry(k.toString(), v.toString())),
+        );
+        // Remove __fieldTypes__ dos fields para migração
+        fieldsJson.remove('__fieldTypes__');
+      }
+    }
 
     return Node(
       id: json['id'] as String,
       name: json['name'] as String,
       children: children,
       fields: fieldsJson,
+      fieldTypes: fieldTypesMap,
     );
   }
 }

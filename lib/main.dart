@@ -24,6 +24,7 @@ import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
 import 'commands/set_node_field_command.dart';
 import 'commands/remove_node_field_command.dart';
+import 'commands/set_node_field_types_command.dart';
 import 'theme/app_theme.dart';
 import 'widgets/git_status_indicator.dart';
 import 'widgets/composer_window.dart';
@@ -559,6 +560,20 @@ class _MyHomePageState extends State<MyHomePage> {
       fieldKey: fieldKey,
       newValue: fieldValue,
       oldValue: null, // Campo novo, não tem valor antigo
+    );
+
+    await _commandHistory.execute(command, _rootNode);
+  }
+
+  void _handleFieldTypesChanged(String nodeId, Map<String, String> fieldTypes) async {
+    final node = _rootNode.findById(nodeId);
+    if (node == null) return;
+
+    final oldFieldTypes = Map<String, String>.from(node.fieldTypes);
+    final command = SetNodeFieldTypesCommand(
+      nodeId: nodeId,
+      newFieldTypes: fieldTypes,
+      oldFieldTypes: oldFieldTypes,
     );
 
     await _commandHistory.execute(command, _rootNode);
@@ -1467,6 +1482,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             onFieldChanged: _handleFieldChanged,
                             onFieldRemoved: _handleFieldRemoved,
                             onFieldAdded: _handleFieldAdded,
+                            onFieldTypesChanged: _handleFieldTypesChanged,
                             mainAppFocusNode: _mainFocusNode,
                             projectPath: _currentProjectPath,
                           ),
