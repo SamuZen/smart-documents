@@ -48,12 +48,54 @@ class _LLMExecutionDialogState extends State<LLMExecutionDialog> {
   @override
   void initState() {
     super.initState();
-    // Seleciona OpenAI por padrão
-    _selectedProvider = LLMProvider.openai;
-    final models = LLMModel.getAvailableModels(LLMProvider.openai);
-    if (models.isNotEmpty) {
-      _selectedModel = models.first;
+    _loadLastConfiguration();
+  }
+
+  Future<void> _loadLastConfiguration() async {
+    // Tenta carregar última configuração
+    final lastProviderStr = await SettingsService.getLastLLMProvider();
+    final lastModelStr = await SettingsService.getLastLLMModel();
+    
+    LLMProvider? provider;
+    if (lastProviderStr != null) {
+      try {
+        provider = LLMProvider.fromJson(lastProviderStr);
+      } catch (e) {
+        // Se falhar, usa OpenAI como padrão
+        provider = LLMProvider.openai;
+      }
+    } else {
+      provider = LLMProvider.openai;
     }
+    
+    setState(() {
+      _selectedProvider = provider;
+    });
+    
+    // Tenta encontrar o último modelo usado
+    LLMModel? model;
+    if (lastModelStr != null) {
+      final models = LLMModel.getAvailableModels(provider);
+      try {
+        model = models.firstWhere(
+          (m) => m.fullName == lastModelStr,
+        );
+      } catch (e) {
+        // Se não encontrar, usa o primeiro disponível
+        if (models.isNotEmpty) {
+          model = models.first;
+        }
+      }
+    } else {
+      final models = LLMModel.getAvailableModels(provider);
+      if (models.isNotEmpty) {
+        model = models.first;
+      }
+    }
+    
+    setState(() {
+      _selectedModel = model;
+    });
   }
 
   void _onProviderChanged(LLMProvider? provider) {
@@ -125,6 +167,10 @@ class _LLMExecutionDialogState extends State<LLMExecutionDialog> {
       );
 
       await LLMHistoryService.saveExecution(history, widget.projectPath);
+
+      // Salva última configuração usada
+      await SettingsService.setLastLLMProvider(_selectedProvider!.toJson());
+      await SettingsService.setLastLLMModel(_selectedModel!.fullName);
 
       // Fecha este dialog e abre o dialog de resultado
       if (mounted) {

@@ -8,6 +8,8 @@ class SettingsService {
   static const String _keyApiKeyAnthropic = 'api_key_anthropic';
   static const String _keyApiKeyGoogle = 'api_key_google';
   static const String _keyApiKeyGrok = 'api_key_grok';
+  static const String _keyLastLLMProvider = 'last_llm_provider';
+  static const String _keyLastLLMModel = 'last_llm_model';
 
   /// Salva a chave de API da OpenAI
   static Future<void> setOpenAIKey(String? apiKey) async {
@@ -139,6 +141,48 @@ class SettingsService {
     } catch (e) {
       print('Erro ao verificar chave de API: $e');
       return false;
+    }
+  }
+
+  /// Salva o último provider LLM usado
+  static Future<void> setLastLLMProvider(String provider) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyLastLLMProvider, provider);
+    } catch (e) {
+      print('Erro ao salvar último provider LLM: $e');
+    }
+  }
+
+  /// Recupera o último provider LLM usado
+  static Future<String?> getLastLLMProvider() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyLastLLMProvider);
+    } catch (e) {
+      print('Erro ao ler último provider LLM: $e');
+      return null;
+    }
+  }
+
+  /// Salva o último modelo LLM usado
+  static Future<void> setLastLLMModel(String model) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_keyLastLLMModel, model);
+    } catch (e) {
+      print('Erro ao salvar último modelo LLM: $e');
+    }
+  }
+
+  /// Recupera o último modelo LLM usado
+  static Future<String?> getLastLLMModel() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getString(_keyLastLLMModel);
+    } catch (e) {
+      print('Erro ao ler último modelo LLM: $e');
+      return null;
     }
   }
 }

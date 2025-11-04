@@ -31,6 +31,11 @@ class AppMenuBar extends StatelessWidget {
   
   // Settings menu callback
   final VoidCallback? onOpenSettings;
+  
+  // Smart Actions menu callbacks
+  final VoidCallback? onCallPromptComposer;
+  final VoidCallback? onShowHistory;
+  final bool showHistory;
 
   const AppMenuBar({
     super.key,
@@ -58,6 +63,9 @@ class AppMenuBar extends StatelessWidget {
     this.showComposer = false,
     this.showPrompts = false,
     this.onOpenSettings,
+    this.onCallPromptComposer,
+    this.onShowHistory,
+    this.showHistory = false,
   });
 
   @override
@@ -167,6 +175,23 @@ class AppMenuBar extends StatelessWidget {
                 icon: showPrompts ? Icons.check_box : Icons.check_box_outline_blank,
                 label: 'Prompts',
                 onPressed: onTogglePrompts,
+              ),
+            ],
+          ),
+          // Menu Smart Actions
+          _MenuButton(
+            label: 'Smart Actions',
+            menuItems: [
+              _MenuItem(
+                icon: Icons.auto_awesome,
+                label: 'Call Prompt Composer',
+                onPressed: onCallPromptComposer,
+              ),
+              const _MenuDivider(),
+              _MenuItem(
+                icon: showHistory ? Icons.check_box : Icons.check_box_outline_blank,
+                label: 'Histórico',
+                onPressed: onShowHistory,
               ),
             ],
           ),
