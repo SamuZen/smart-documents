@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class DraggableResizableWindow extends StatefulWidget {
   final Widget child;
@@ -7,6 +8,7 @@ class DraggableResizableWindow extends StatefulWidget {
   final double initialHeight;
   final double minWidth;
   final double minHeight;
+  final Offset? initialPosition; // Posição inicial customizada
   final VoidCallback? onClose;
   final VoidCallback? onTap; // Callback quando a janela é clicada (para retornar foco)
 
@@ -18,6 +20,7 @@ class DraggableResizableWindow extends StatefulWidget {
     this.initialHeight = 400,
     this.minWidth = 200,
     this.minHeight = 200,
+    this.initialPosition,
     this.onClose,
     this.onTap,
   });
@@ -51,7 +54,8 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
     super.initState();
     _width = widget.initialWidth;
     _height = widget.initialHeight;
-    _position = const Offset(100, 100);
+    // Usa posição inicial customizada se fornecida, senão usa posição padrão
+    _position = widget.initialPosition ?? const Offset(100, 100);
   }
 
   void _onDragStart(DragStartDetails details) {
@@ -480,7 +484,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
 
   Color _getDockIndicatorColor() {
     if (_currentDockZone == null) return Colors.transparent;
-    return Theme.of(context).colorScheme.primary.withOpacity(0.3);
+    return AppTheme.neonBlue.withOpacity(0.2);
   }
 
   @override
@@ -515,21 +519,21 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
               width: _width,
               height: _height,
               decoration: BoxDecoration(
-                color: Theme.of(context).scaffoldBackgroundColor,
+                color: AppTheme.surfaceElevated, // Mais claro para destacar janelas
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 10,
-                    spreadRadius: 2,
-                  ),
-                ],
                 border: Border.all(
                   color: _currentDockZone != null
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).dividerColor,
-                  width: _currentDockZone != null ? 2 : 1,
+                      ? AppTheme.neonBlue.withOpacity(0.6)
+                      : AppTheme.borderNeutral, // Borda neutra quando não dockado
+                  width: _currentDockZone != null ? 1.5 : 1,
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 15,
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
               child: Stack(
           children: [
@@ -545,10 +549,16 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                   child: Container(
                     height: 40,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primaryContainer,
+                      color: AppTheme.surfaceNeutral, // Diferente da janela
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(8),
                         topRight: Radius.circular(8),
+                      ),
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.borderNeutral,
+                          width: 1,
+                        ),
                       ),
                     ),
                     child: Row(
@@ -558,19 +568,26 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                           child: Text(
                             widget.title,
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                  color: Theme.of(context)
-                                      .colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                  fontWeight: FontWeight.w500,
                                 ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 20),
-                          onPressed: widget.onClose,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          iconSize: 20,
+                        Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: widget.onClose,
+                            borderRadius: BorderRadius.circular(4),
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                Icons.close,
+                                size: 18,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 8),
                       ],
@@ -584,7 +601,10 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                       bottomLeft: Radius.circular(8),
                       bottomRight: Radius.circular(8),
                     ),
-                    child: widget.child,
+                    child: Container(
+                      color: AppTheme.surfaceElevated, // Mantém consistência
+                      child: widget.child,
+                    ),
                   ),
                 ),
               ],
@@ -607,7 +627,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                     child: Container(
                       margin: const EdgeInsets.only(right: 0, bottom: 0),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        color: AppTheme.borderNeutral.withOpacity(0.3),
                         borderRadius: const BorderRadius.only(
                           bottomRight: Radius.circular(8),
                         ),
@@ -615,7 +635,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                       child: Icon(
                         Icons.drag_handle,
                         size: 18,
-                        color: Theme.of(context).colorScheme.onSurface,
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                   ),
@@ -649,7 +669,7 @@ class _DraggableResizableWindowState extends State<DraggableResizableWindow>
                       decoration: BoxDecoration(
                         color: _getDockIndicatorColor(),
                         border: Border.all(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: AppTheme.neonBlue.withOpacity(0.5),
                           width: 2,
                         ),
                       ),

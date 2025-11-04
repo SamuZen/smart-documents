@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../utils/preferences.dart';
+import '../theme/app_theme.dart';
 
 class WelcomeScreen extends StatefulWidget {
   final VoidCallback? onNewProject;
@@ -58,23 +59,38 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.description,
-              size: 64,
-              color: Theme.of(context).colorScheme.primary,
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.neonBlue.withOpacity(0.3),
+                    AppTheme.neonCyan.withOpacity(0.2),
+                  ],
+                ),
+                boxShadow: AppTheme.neonGlowBlue,
+              ),
+              child: Icon(
+                Icons.description,
+                size: 64,
+                color: AppTheme.neonBlue,
+              ),
             ),
             const SizedBox(height: 24),
             Text(
               'Smart Document',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: AppTheme.neonBlue,
+                    letterSpacing: 1.0,
                   ),
             ),
             const SizedBox(height: 8),
             Text(
               'Gerencie seus projetos de documentos hierárquicos',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
+                    color: AppTheme.textSecondary,
                   ),
             ),
             const SizedBox(height: 48),
@@ -114,6 +130,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 'Projetos Recentes',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
                     ),
               ),
               const SizedBox(height: 16),
@@ -141,7 +158,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           project.path,
           style: TextStyle(
             fontSize: 12,
-            color: Colors.grey[600],
+            color: AppTheme.textSecondary,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,

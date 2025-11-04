@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:developer' as developer;
+import 'dart:io';
 import 'models/node.dart';
 import 'services/project_service.dart';
 import 'services/command_history.dart';
@@ -23,6 +24,7 @@ import 'screens/welcome_screen.dart';
 import 'utils/preferences.dart';
 import 'commands/set_node_field_command.dart';
 import 'commands/remove_node_field_command.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(const MyApp());
@@ -35,9 +37,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Smart Document',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color.fromARGB(255, 118, 206, 47)),
-      ),
+      theme: AppTheme.darkTheme,
+      debugShowCheckedModeBanner: false,
       home: const MyHomePage(title: 'Smart Document'),
     );
   }
@@ -970,14 +971,108 @@ class _MyHomePageState extends State<MyHomePage> {
     _checkpointManager.clearCheckpoints();
   }
 
+  Future<void> _handleOpenProjectLocation() async {
+    if (_currentProjectPath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Nenhum projeto aberto')),
+      );
+      return;
+    }
+
+    try {
+      final directory = Directory(_currentProjectPath!);
+      if (!directory.existsSync()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('A pasta do projeto não existe mais')),
+        );
+        return;
+      }
+
+      // Abre o explorador de arquivos na pasta do projeto
+      if (Platform.isWindows) {
+        // Windows: usa explorer.exe
+        await Process.run('explorer.exe', [_currentProjectPath!]);
+      } else if (Platform.isLinux) {
+        // Linux: usa xdg-open
+        await Process.run('xdg-open', [_currentProjectPath!]);
+      } else if (Platform.isMacOS) {
+        // macOS: usa open
+        await Process.run('open', [_currentProjectPath!]);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Sistema operacional não suportado')),
+        );
+      }
+    } catch (e) {
+      print('❌ Erro ao abrir localização do projeto: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erro ao abrir localização: $e')),
+      );
+    }
+  }
+
   // ========== Métodos de Undo/Redo ==========
 
   Future<void> _handleUndo() async {
-    await _commandHistory.undo(_rootNode);
+    final affectedNodeId = await _commandHistory.undo(_rootNode);
+    
+    // Se houver um node afetado, seleciona e foca nele
+    if (affectedNodeId != null) {
+      // Aguarda o setState ser processado antes de selecionar
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedNodeId = affectedNodeId;
+          });
+          // Notifica mudança de seleção para atualizar o TreeView
+          _handleSelectionChanged(affectedNodeId);
+          
+          // Garante que o TreeView recebe foco para que F2 funcione
+          if (_showWindow) {
+            // Aguarda mais um frame para garantir que o TreeView foi atualizado
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                // Solicita foco no TreeView (será feito automaticamente quando clicar, mas aqui garantimos)
+                final focusScope = FocusScope.of(context);
+                focusScope.unfocus(); // Remove foco atual
+                // O TreeView vai receber foco automaticamente quando o node for selecionado
+              }
+            });
+          }
+        }
+      });
+    }
   }
 
   Future<void> _handleRedo() async {
-    await _commandHistory.redo(_rootNode);
+    final affectedNodeId = await _commandHistory.redo(_rootNode);
+    
+    // Se houver um node afetado, seleciona e foca nele
+    if (affectedNodeId != null) {
+      // Aguarda o setState ser processado antes de selecionar
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _selectedNodeId = affectedNodeId;
+          });
+          // Notifica mudança de seleção para atualizar o TreeView
+          _handleSelectionChanged(affectedNodeId);
+          
+          // Garante que o TreeView recebe foco para que F2 funcione
+          if (_showWindow) {
+            // Aguarda mais um frame para garantir que o TreeView foi atualizado
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                // Solicita foco no TreeView (será feito automaticamente quando clicar, mas aqui garantimos)
+                final focusScope = FocusScope.of(context);
+                focusScope.unfocus(); // Remove foco atual
+                // O TreeView vai receber foco automaticamente quando o node for selecionado
+              }
+            });
+          }
+        }
+      });
+    }
   }
 
   Future<void> _handleCreateCheckpoint() async {
@@ -1107,8 +1202,8 @@ class _MyHomePageState extends State<MyHomePage> {
         // Adicionar node - só funciona quando não está editando
         LogicalKeySet(LogicalKeyboardKey.keyN): const _AddNodeGlobalIntent(),
         // Deletar node - só funciona quando não está editando
+        // Apenas DEL (Delete), não Backspace
         LogicalKeySet(LogicalKeyboardKey.delete): const _DeleteNodeGlobalIntent(),
-        LogicalKeySet(LogicalKeyboardKey.backspace): const _DeleteNodeGlobalIntent(),
       },
       child: Actions(
         actions: {
@@ -1231,103 +1326,6 @@ class _MyHomePageState extends State<MyHomePage> {
             }
           },
           child: Scaffold(
-      appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(_getWindowTitle()),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.window),
-            tooltip: 'Gerenciar janelas',
-            onSelected: (value) {
-              setState(() {
-                switch (value) {
-                  case 'toggle_navigation':
-                    _showWindow = !_showWindow;
-                    break;
-                  case 'toggle_actions':
-                    _showActionsWindow = !_showActionsWindow;
-                    break;
-                  case 'toggle_document_editor':
-                    _showDocumentEditor = !_showDocumentEditor;
-                    break;
-                  case 'show_all':
-                    _showWindow = true;
-                    _showActionsWindow = true;
-                    _showDocumentEditor = true;
-                    break;
-                  case 'hide_all':
-                    _showWindow = false;
-                    _showActionsWindow = false;
-                    _showDocumentEditor = false;
-                    break;
-                }
-              });
-            },
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
-                value: 'toggle_navigation',
-                child: Row(
-                  children: [
-                    Icon(
-                      _showWindow ? Icons.visibility_off : Icons.visibility,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(_showWindow ? 'Ocultar Navegação' : 'Mostrar Navegação'),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'toggle_actions',
-                child: Row(
-                  children: [
-                    Icon(
-                      _showActionsWindow ? Icons.visibility_off : Icons.visibility,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(_showActionsWindow ? 'Ocultar Ações' : 'Mostrar Ações'),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'toggle_document_editor',
-                child: Row(
-                  children: [
-                    Icon(
-                      _showDocumentEditor ? Icons.visibility_off : Icons.visibility,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(_showDocumentEditor ? 'Ocultar Editor' : 'Mostrar Editor'),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              PopupMenuItem<String>(
-                value: 'show_all',
-                child: const Row(
-                  children: [
-                    Icon(Icons.visibility, size: 20),
-                    SizedBox(width: 12),
-                    Text('Mostrar Todas'),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'hide_all',
-                child: const Row(
-                  children: [
-                    Icon(Icons.visibility_off, size: 20),
-                    SizedBox(width: 12),
-                    Text('Ocultar Todas'),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
       body: Column(
         children: [
           // Menu Bar
@@ -1336,6 +1334,7 @@ class _MyHomePageState extends State<MyHomePage> {
             onOpenProject: _handleOpenProject,
             onSaveProject: _handleSaveProject,
             onCloseProject: _handleCloseProject,
+            onOpenProjectLocation: _handleOpenProjectLocation,
             onUndo: _handleUndo,
             onRedo: _handleRedo,
             onCreateCheckpoint: _handleCreateCheckpoint,
@@ -1344,6 +1343,24 @@ class _MyHomePageState extends State<MyHomePage> {
             canRedo: _commandHistory.canRedo,
             undoDescription: _undoDescription != null ? 'Desfazer: $_undoDescription' : 'Desfazer',
             redoDescription: _redoDescription != null ? 'Refazer: $_redoDescription' : 'Refazer',
+            onToggleNavigation: () {
+              setState(() {
+                _showWindow = !_showWindow;
+              });
+            },
+            onToggleActions: () {
+              setState(() {
+                _showActionsWindow = !_showActionsWindow;
+              });
+            },
+            onToggleDocumentEditor: () {
+              setState(() {
+                _showDocumentEditor = !_showDocumentEditor;
+              });
+            },
+            showNavigation: _showWindow,
+            showActions: _showActionsWindow,
+            showDocumentEditor: _showDocumentEditor,
           ),
           // Conteúdo principal
           Expanded(
@@ -1355,47 +1372,49 @@ class _MyHomePageState extends State<MyHomePage> {
                   )
                 : Stack(
                     children: [
-                      // Área principal
-                      const Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.description,
-                              size: 64,
-                              color: Colors.grey,
-                            ),
-                            SizedBox(height: 16),
-                            Text(
-                              'Área de trabalho principal',
-                              style: TextStyle(
-                                fontSize: 18,
-                                color: Colors.grey,
+                      // Área principal - Background escuro para contraste
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppTheme.backgroundDark, // Fundo mais escuro para contraste
+                        ),
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.description,
+                                size: 64,
+                                color: AppTheme.neonBlue.withOpacity(0.3),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 16),
+                              Text(
+                                'Área de trabalho principal',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  color: AppTheme.textSecondary,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       // Janela flutuante com TreeView
                       if (_showWindow)
                         DraggableResizableWindow(
+                          key: const ValueKey('navigation_window'),
                           title: 'Navegação',
                           initialWidth: 300,
                           initialHeight: 500,
                           minWidth: 250,
                           minHeight: 300,
+                          initialPosition: const Offset(50, 50),
                           onClose: () {
                             setState(() {
                               _showWindow = false;
                             });
                           },
-                          onTap: () {
-                            // Retorna foco ao widget principal quando clica na janela
-                            if (!_mainFocusNode.hasFocus) {
-                              print('🖱️ [Main] Clique na janela Navegação, retornando foco');
-                              _mainFocusNode.requestFocus();
-                            }
-                          },
+                          // Removido onTap para permitir que o TreeView mantenha o foco e capture F2
                           child: TreeView(
                             rootNode: _rootNode,
                             onNodeNameChanged: _updateRootNode,
@@ -1412,11 +1431,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       // Janela flutuante com ActionsPanel (sempre visível)
                       if (_showActionsWindow)
                         DraggableResizableWindow(
+                          key: const ValueKey('actions_window'),
                           title: 'Ações',
                           initialWidth: 350,
                           initialHeight: 500,
                           minWidth: 280,
                           minHeight: 300,
+                          initialPosition: const Offset(400, 50),
                           onClose: () {
                             setState(() {
                               _showActionsWindow = false;
@@ -1438,11 +1459,13 @@ class _MyHomePageState extends State<MyHomePage> {
                       // Janela flutuante com DocumentEditor
                       if (_showDocumentEditor)
                         DraggableResizableWindow(
+                          key: const ValueKey('document_editor_window'),
                           title: 'Editor de Documento',
                           initialWidth: 400,
                           initialHeight: 600,
                           minWidth: 350,
                           minHeight: 400,
+                          initialPosition: const Offset(800, 50),
                           onClose: () {
                             setState(() {
                               _showDocumentEditor = false;

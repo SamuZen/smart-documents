@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class ConfirmationDialog {
   /// Mostra um diálogo de confirmação
@@ -25,7 +26,31 @@ class ConfirmationDialog {
       context: context,
       barrierDismissible: true,
       builder: (BuildContext context) {
-        return AlertDialog(
+        return Shortcuts(
+          shortcuts: {
+            LogicalKeySet(LogicalKeyboardKey.enter): const _ConfirmIntent(),
+            LogicalKeySet(LogicalKeyboardKey.escape): const _CancelIntent(),
+          },
+          child: Actions(
+            actions: {
+              _ConfirmIntent: CallbackAction<_ConfirmIntent>(
+                onInvoke: (_) {
+                  Navigator.of(context).pop(true);
+                  onConfirm();
+                  return null;
+                },
+              ),
+              _CancelIntent: CallbackAction<_CancelIntent>(
+                onInvoke: (_) {
+                  Navigator.of(context).pop(false);
+                  onCancel?.call();
+                  return null;
+                },
+              ),
+            },
+            child: Focus(
+              autofocus: true,
+              child: AlertDialog(
           title: Text(title),
           content: Text(message),
           actions: [
@@ -50,9 +75,22 @@ class ConfirmationDialog {
               child: Text(confirmText),
             ),
           ],
+              ),
+            ),
+          ),
         );
       },
     );
   }
+}
+
+// Intent para confirmar (Enter)
+class _ConfirmIntent extends Intent {
+  const _ConfirmIntent();
+}
+
+// Intent para cancelar (ESC)
+class _CancelIntent extends Intent {
+  const _CancelIntent();
 }
 
