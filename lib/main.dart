@@ -535,6 +535,135 @@ class _MyHomePageState extends State<MyHomePage> {
     return _expandedNodes.contains(_selectedNodeId);
   }
 
+  /// Constrói uma TreeView que mostra nodes do projeto e prompts como irmãos na raiz
+  Widget _buildTreeViewWithMultipleRoots() {
+    // Cria um root virtual invisível que tem os dois roots como filhos
+    final virtualRoot = Node(
+      id: 'virtual-root',
+      name: '',
+    );
+    virtualRoot.addChild(_rootNode);
+    virtualRoot.addChild(_promptsRootNode);
+    
+    // Usa TreeView normal mas precisa construir manualmente para mostrar apenas os filhos
+    // Criando um root combinado temporário só para a TreeView funcionar
+    final combinedRoot = Node(
+      id: 'combined-root',
+      name: '', // Nome vazio faz TreeView ocultar o root e mostrar apenas filhos
+    );
+    combinedRoot.addChild(_rootNode);
+    combinedRoot.addChild(_promptsRootNode);
+    
+    return TreeView(
+      rootNode: combinedRoot,
+      onNodeNameChanged: (nodeId, newName) {
+        // Ignora mudanças no root combinado
+        if (nodeId == 'combined-root') return;
+        // Direciona para o handler correto baseado no tipo de node
+        if (_isPromptNode(nodeId)) {
+          _updatePromptsRootNode(nodeId, newName);
+        } else if (_isProjectNode(nodeId)) {
+          _updateRootNode(nodeId, newName);
+        }
+      },
+      onSelectionChanged: (nodeId) {
+        // Ignora seleção do root combinado
+        if (nodeId == 'combined-root') {
+          _handleSelectionChanged(null);
+          setState(() {
+            _selectedPromptNodeId = null;
+          });
+          return;
+        }
+        // Direciona para o handler correto baseado no tipo de node
+        if (nodeId == null) {
+          _handleSelectionChanged(null);
+          setState(() {
+            _selectedPromptNodeId = null;
+          });
+        } else if (_isPromptNode(nodeId)) {
+          _handlePromptSelectionChanged(nodeId);
+          setState(() {
+            _selectedNodeId = null; // Limpa seleção de nodes
+          });
+        } else if (_isProjectNode(nodeId)) {
+          _handleSelectionChanged(nodeId);
+          setState(() {
+            _selectedPromptNodeId = null; // Limpa seleção de prompts
+          });
+        }
+      },
+      onEditingStateChanged: (isEditing, nodeId) {
+        if (nodeId != null && nodeId != 'combined-root') {
+          if (_isProjectNode(nodeId)) {
+            _handleEditingStateChanged(isEditing, nodeId);
+          }
+          // Para prompts, não precisa de _isEditing separado
+        }
+      },
+      onExpansionChanged: (nodeId, isExpanded) {
+        // Ignora expansão do root combinado
+        if (nodeId == 'combined-root') return;
+        if (_isPromptNode(nodeId)) {
+          _handlePromptExpansionChanged(nodeId, isExpanded);
+        } else if (_isProjectNode(nodeId)) {
+          _handleExpansionChanged(nodeId, isExpanded);
+        }
+      },
+      onNodeReordered: (draggedNodeId, targetNodeId, insertBefore) {
+        // Não permite reordenar os roots principais
+        if (draggedNodeId == _rootNode.id || draggedNodeId == _promptsRootNode.id ||
+            targetNodeId == _rootNode.id || targetNodeId == _promptsRootNode.id) {
+          return;
+        }
+        // Verifica se ambos são do mesmo tipo
+        if (_isPromptNode(draggedNodeId) && _isPromptNode(targetNodeId)) {
+          _handlePromptNodeReordered(draggedNodeId, targetNodeId, insertBefore);
+        } else if (_isProjectNode(draggedNodeId) && _isProjectNode(targetNodeId)) {
+          _handleNodeReordered(draggedNodeId, targetNodeId, insertBefore);
+        }
+        // Não permite mover entre tipos diferentes
+      },
+      onNodeParentChanged: (draggedNodeId, newParentId) {
+        // Não permite mover os roots principais
+        if (draggedNodeId == _rootNode.id || draggedNodeId == _promptsRootNode.id) {
+          return;
+        }
+        // Não permite mover para o root combinado
+        if (newParentId == 'combined-root') {
+          return;
+        }
+        // Verifica se ambos são do mesmo tipo
+        if (_isPromptNode(draggedNodeId) && _isPromptNode(newParentId)) {
+          _handlePromptNodeParentChanged(draggedNodeId, newParentId);
+        } else if (_isProjectNode(draggedNodeId) && _isProjectNode(newParentId)) {
+          _handleNodeParentChanged(draggedNodeId, newParentId);
+        }
+        // Não permite mover entre tipos diferentes
+      },
+      onNodeAdded: (parentNodeId, newNodeId, newNodeName) {
+        // Não permite adicionar filhos ao root combinado
+        if (parentNodeId == 'combined-root') return;
+        if (_isPromptNode(parentNodeId)) {
+          _handlePromptNodeAdded(parentNodeId, newNodeId, newNodeName);
+        } else if (_isProjectNode(parentNodeId)) {
+          _handleNodeAdded(parentNodeId, newNodeId, newNodeName);
+        }
+      },
+      onNodeDeleted: (deletedNodeId) {
+        // Não permite deletar os roots principais
+        if (deletedNodeId == _rootNode.id || deletedNodeId == _promptsRootNode.id) {
+          return;
+        }
+        if (_isPromptNode(deletedNodeId)) {
+          _handlePromptNodeDeleted(deletedNodeId);
+        } else if (_isProjectNode(deletedNodeId)) {
+          _handleNodeDeleted(deletedNodeId);
+        }
+      },
+    );
+  }
+
   void _updateRootNode(String nodeId, String newName) async {
     developer.log('MyHomePage: _updateRootNode chamado. nodeId: $nodeId, newName: "$newName"');
     final oldName = _rootNode.findById(nodeId)?.name ?? '';
@@ -1630,84 +1759,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           // Removido onTap para permitir que o TreeView mantenha o foco e capture F2
-                          child: TreeView(
-                            rootNode: _getCombinedRootNode(),
-                            onNodeNameChanged: (nodeId, newName) {
-                              // Direciona para o handler correto baseado no tipo de node
-                              if (_isPromptNode(nodeId)) {
-                                _updatePromptsRootNode(nodeId, newName);
-                              } else if (_isProjectNode(nodeId)) {
-                                _updateRootNode(nodeId, newName);
-                              }
-                            },
-                            onSelectionChanged: (nodeId) {
-                              // Direciona para o handler correto baseado no tipo de node
-                              if (nodeId == null) {
-                                _handleSelectionChanged(null);
-                                setState(() {
-                                  _selectedPromptNodeId = null;
-                                });
-                              } else if (_isPromptNode(nodeId)) {
-                                _handlePromptSelectionChanged(nodeId);
-                                setState(() {
-                                  _selectedNodeId = null; // Limpa seleção de nodes
-                                });
-                              } else if (_isProjectNode(nodeId)) {
-                                _handleSelectionChanged(nodeId);
-                                setState(() {
-                                  _selectedPromptNodeId = null; // Limpa seleção de prompts
-                                });
-                              }
-                            },
-                            onEditingStateChanged: (isEditing, nodeId) {
-                              if (nodeId != null) {
-                                if (_isProjectNode(nodeId)) {
-                                  _handleEditingStateChanged(isEditing, nodeId);
-                                }
-                                // Para prompts, não precisa de _isEditing separado
-                              }
-                            },
-                            onExpansionChanged: (nodeId, isExpanded) {
-                              if (_isPromptNode(nodeId)) {
-                                _handlePromptExpansionChanged(nodeId, isExpanded);
-                              } else if (_isProjectNode(nodeId)) {
-                                _handleExpansionChanged(nodeId, isExpanded);
-                              }
-                            },
-                            onNodeReordered: (draggedNodeId, targetNodeId, insertBefore) {
-                              // Verifica se ambos são do mesmo tipo
-                              if (_isPromptNode(draggedNodeId) && _isPromptNode(targetNodeId)) {
-                                _handlePromptNodeReordered(draggedNodeId, targetNodeId, insertBefore);
-                              } else if (_isProjectNode(draggedNodeId) && _isProjectNode(targetNodeId)) {
-                                _handleNodeReordered(draggedNodeId, targetNodeId, insertBefore);
-                              }
-                              // Não permite mover entre tipos diferentes
-                            },
-                            onNodeParentChanged: (draggedNodeId, newParentId) {
-                              // Verifica se ambos são do mesmo tipo
-                              if (_isPromptNode(draggedNodeId) && _isPromptNode(newParentId)) {
-                                _handlePromptNodeParentChanged(draggedNodeId, newParentId);
-                              } else if (_isProjectNode(draggedNodeId) && _isProjectNode(newParentId)) {
-                                _handleNodeParentChanged(draggedNodeId, newParentId);
-                              }
-                              // Não permite mover entre tipos diferentes
-                            },
-                            onNodeAdded: (parentNodeId, newNodeId, newNodeName) {
-                              if (_isPromptNode(parentNodeId)) {
-                                _handlePromptNodeAdded(parentNodeId, newNodeId, newNodeName);
-                              } else if (_isProjectNode(parentNodeId)) {
-                                _handleNodeAdded(parentNodeId, newNodeId, newNodeName);
-                              }
-                            },
-                            onNodeDeleted: (deletedNodeId) {
-                              if (_isPromptNode(deletedNodeId)) {
-                                _handlePromptNodeDeleted(deletedNodeId);
-                              } else if (_isProjectNode(deletedNodeId)) {
-                                _handleNodeDeleted(deletedNodeId);
-                              }
-                            },
-                            // onUndo e onRedo removidos - agora são gerenciados globalmente
-                          ),
+                          child: _buildTreeViewWithMultipleRoots(),
                         ),
                       // Janela flutuante com ActionsPanel (sempre visível)
                       if (_showActionsWindow)
