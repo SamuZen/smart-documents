@@ -904,6 +904,8 @@ class _TreeViewState extends State<TreeView> {
       onFocusChange: (hasFocus) {
         print('🔍 [TreeView] Foco mudou: hasFocus=$hasFocus');
         developer.log('TreeView: Foco mudou. hasFocus=$hasFocus');
+        // Não cancela edição aqui - o TextField precisa perder o foco primeiro
+        // A edição será cancelada apenas quando clicar na área vazia da janela
       },
       onKeyEvent: (node, event) {
         print('⌨️ [TreeView] onKeyEvent chamado: ${event.runtimeType}, key: ${event.logicalKey}');
@@ -1037,8 +1039,26 @@ class _TreeViewState extends State<TreeView> {
         },
         child: GestureDetector(
           onTap: () {
-            // Garante que o TreeView recebe foco quando clicado
-            print('🖱️ [TreeView] Clique detectado, solicitando foco');
+            // Garante que o TreeView recebe foco quando clicado na área vazia
+            print('🖱️ [TreeView] Clique detectado na área vazia');
+            
+            // Se está editando e clicou na área vazia, verifica após um frame
+            // se o TextField ainda tem foco - se não tiver, cancela
+            if (_editingNodeId != null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                final focusScope = FocusScope.of(context);
+                final focusedChild = focusScope.focusedChild;
+                // Verifica se algum TextField está focado (incluindo o que está editando)
+                final isAnyTextFieldFocused = focusedChild?.runtimeType.toString().contains('EditableText') ?? false;
+                
+                if (!isAnyTextFieldFocused && _editingNodeId != null) {
+                  print('⚠️ [TreeView] Clique na área vazia e nenhum TextField focado, cancelando edição');
+                  _cancelEditing();
+                  _handleCancelEditing();
+                }
+              });
+            }
+            
             if (!_treeFocusNode.hasFocus) {
               _treeFocusNode.requestFocus();
             }

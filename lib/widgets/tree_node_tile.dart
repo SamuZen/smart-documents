@@ -42,9 +42,11 @@ class TreeNodeTile extends StatefulWidget {
 class _TreeNodeTileState extends State<TreeNodeTile> {
   late TextEditingController _textController;
   final FocusNode _focusNode = FocusNode();
+  bool _wasSubmitted = false; // Flag para saber se foi submetido ou cancelado
 
   
   void confirmEditing() {
+    _wasSubmitted = true; // Marca que foi submetido via Enter
     final trimmedValue = _textController.text.trim();
     print('📝 [TreeNodeTile] confirmEditing() chamado - valor: "$trimmedValue"');
     print('   onNameChanged existe: ${widget.onNameChanged != null}');
@@ -53,9 +55,11 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
       widget.onNameChanged!(trimmedValue);
     } else if (trimmedValue.isEmpty) {
       print('❌ [TreeNodeTile] Valor vazio, cancelando');
+      _wasSubmitted = false; // Não foi submetido se estava vazio
       widget.onCancelEditing?.call();
     } else if (widget.onNameChanged == null) {
       print('❌ [TreeNodeTile] onNameChanged é NULL! Não é possível salvar');
+      _wasSubmitted = false; // Não foi submetido se callback não existe
     }
   }
   
@@ -63,6 +67,19 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
   void initState() {
     super.initState();
     _textController = TextEditingController(text: widget.node.name);
+    
+    // Listener para detectar quando o TextField perde o foco
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus && widget.isEditing && !_wasSubmitted) {
+        // TextField perdeu o foco e não foi submetido - cancela a edição
+        print('⚠️ [TreeNodeTile] TextField perdeu foco sem ser submetido, cancelando edição');
+        widget.onCancelEditing?.call();
+      }
+      // Reseta a flag após processar
+      if (!widget.isEditing) {
+        _wasSubmitted = false;
+      }
+    });
   }
 
   @override
@@ -74,6 +91,7 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
       print('🔵 [TreeNodeTile] INICIANDO EDIÇÃO - Node: ${widget.node.id} | Nome: "${widget.node.name}"');
       developer.log('TreeNodeTile: Entrando em modo de edição para node ${widget.node.id} (${widget.node.name})');
       _textController.text = widget.node.name;
+      _wasSubmitted = false; // Reseta flag ao entrar em modo de edição
       // Usa post frame callback para garantir que o widget está totalmente construído
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
@@ -96,6 +114,7 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
       developer.log('TreeNodeTile: Saindo do modo de edição para node ${widget.node.id} (nome final: ${widget.node.name})');
       _textController.text = widget.node.name;
       _focusNode.unfocus();
+      _wasSubmitted = false; // Reseta flag ao sair do modo de edição
     }
     
     // Atualiza o controller quando o nome do node muda (apenas quando não está editando)
@@ -107,6 +126,7 @@ class _TreeNodeTileState extends State<TreeNodeTile> {
 
 
   void _handleSubmitted(String value) {
+    _wasSubmitted = true; // Marca que foi submetido antes de processar
     final trimmedValue = value.trim();
     print('🟢 [TreeNodeTile] SUBMETENDO EDIÇÃO - Node: ${widget.node.id}');
     print('   Valor digitado: "$value"');
