@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
 import 'confirmation_dialog.dart';
@@ -45,6 +46,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
   late final FocusNode _newFieldKeyFocusNode;
   late final FocusNode _newFieldValueFocusNode;
   bool _showAddField = false;
+  bool _isDraggingFiles = false;
 
   // Chave especial para armazenar metadados de tipos de campos
   static const String _fieldTypesKey = '__fieldTypes__';
@@ -710,9 +712,36 @@ class _DocumentEditorState extends State<DocumentEditor> {
     final node = widget.selectedNode!;
     final fields = node.fields;
 
-    return Container(
-      color: AppTheme.surfaceDark,
-      child: Column(
+    return DropTarget(
+      onDragDone: (detail) async {
+        await _handleFileDrop(detail.files);
+      },
+      onDragEntered: (detail) {
+        setState(() {
+          _isDraggingFiles = true;
+        });
+      },
+      onDragExited: (detail) {
+        setState(() {
+          _isDraggingFiles = false;
+        });
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: _isDraggingFiles 
+              ? AppTheme.neonBlue.withOpacity(0.1)
+              : AppTheme.surfaceDark,
+          border: _isDraggingFiles
+              ? Border.all(
+                  color: AppTheme.neonBlue.withOpacity(0.5),
+                  width: 2,
+                )
+              : null,
+          borderRadius: _isDraggingFiles
+              ? BorderRadius.circular(4)
+              : null,
+        ),
+        child: Column(
         children: [
           // Header compacto
           Container(
@@ -1092,6 +1121,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
@@ -1685,6 +1715,92 @@ class _DocumentEditorState extends State<DocumentEditor> {
       }
       return newValue;
     });
+  }
+
+  /// Processa arquivos arrastados e soltos no editor
+  Future<void> _handleFileDrop(List<dynamic> files) async {
+    if (widget.selectedNode == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Selecione um node para adicionar imagens')),
+      );
+      return;
+    }
+
+    if (files.isEmpty) return;
+
+    setState(() {
+      _isDraggingFiles = false;
+    });
+
+    // Processa apenas imagens
+    final imageFiles = files.where((file) {
+      final path = file.path?.toString() ?? '';
+      if (path.isEmpty) return false;
+      final extension = path.toLowerCase().split('.').last;
+      return ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'].contains(extension);
+    }).toList();
+
+    if (imageFiles.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apenas arquivos de imagem são suportados')),
+      );
+      return;
+    }
+
+    // Processa cada imagem
+    for (final file in imageFiles) {
+      try {
+        final filePath = file.path?.toString() ?? '';
+        if (filePath.isEmpty) continue;
+        
+        // Copia a imagem para o projeto
+        final copiedPath = await _copyImageToProject(filePath);
+        
+        if (copiedPath != null) {
+          // Gera um nome de campo único baseado no timestamp
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          final fieldKey = 'image_$timestamp';
+          
+          // Verifica se o campo já existe (improvável, mas por segurança)
+          int counter = 1;
+          String finalFieldKey = fieldKey;
+          while (widget.selectedNode!.fields.containsKey(finalFieldKey)) {
+            finalFieldKey = '${fieldKey}_$counter';
+            counter++;
+          }
+          
+          // Adiciona o campo ao node
+          widget.onFieldAdded(widget.selectedNode!.id, finalFieldKey, copiedPath);
+          
+          // Salva o tipo do campo
+          _fieldTypes[finalFieldKey] = 'image';
+          _saveFieldType(finalFieldKey, 'image');
+          
+          // Atualiza os controllers
+          _updateControllers();
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erro ao copiar imagem: ${file.name}')),
+          );
+        }
+      } catch (e) {
+        print('❌ [DocumentEditor] Erro ao processar arquivo ${file.name}: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erro ao processar ${file.name}: $e')),
+        );
+      }
+    }
+
+    // Mostra mensagem de sucesso
+    if (imageFiles.length == 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Imagem adicionada com sucesso')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${imageFiles.length} imagens adicionadas com sucesso')),
+      );
+    }
   }
 }
 
