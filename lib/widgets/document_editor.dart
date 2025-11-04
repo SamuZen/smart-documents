@@ -6,6 +6,7 @@ import 'package:desktop_drop/desktop_drop.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
 import 'confirmation_dialog.dart';
+import '../services/prompt_node_service.dart';
 
 /// Intent para Tab com indentação
 class _TabIndentIntent extends Intent {
@@ -56,6 +57,18 @@ class _DocumentEditorState extends State<DocumentEditor> {
   bool _isDraggingFiles = false;
   String? _editingFieldKey; // Key do campo sendo editado
   final TextEditingController _editingKeyController = TextEditingController();
+
+  /// Verifica se o node atual é um prompt node
+  bool get _isPromptNode {
+    return widget.selectedNode != null && 
+           PromptNodeService.isPromptNode(widget.selectedNode!);
+  }
+
+  /// Verifica se um field é obrigatório para prompts
+  bool _isRequiredPromptField(String fieldKey) {
+    if (!_isPromptNode) return false;
+    return fieldKey == 'prompt' || fieldKey == 'order' || fieldKey == 'index';
+  }
 
   /// Carrega os tipos de campos do campo fieldTypes do node
   Map<String, String> _loadFieldTypes() {
@@ -358,6 +371,11 @@ class _DocumentEditorState extends State<DocumentEditor> {
 
   void _removeField(String key) {
     if (widget.selectedNode == null) return;
+    
+    // Não permite remover fields obrigatórios de prompts
+    if (_isRequiredPromptField(key)) {
+      return;
+    }
 
     widget.onFieldRemoved(widget.selectedNode!.id, key);
     _controllers[key]?.dispose();
@@ -1215,33 +1233,42 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                     ),
                   )
-                : InkWell(
-                    onTap: () {
-                      setState(() {
-                        _editingFieldKey = key;
-                        _editingKeyController.text = key;
-                      });
-                    },
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            key,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
+                : _isRequiredPromptField(key)
+                    ? Text(
+                        key,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      )
+                    : InkWell(
+                        onTap: () {
+                          setState(() {
+                            _editingFieldKey = key;
+                            _editingKeyController.text = key;
+                          });
+                        },
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                key,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                             ),
-                          ),
+                            Icon(
+                              Icons.edit,
+                              size: 12,
+                              color: AppTheme.textTertiary,
+                            ),
+                          ],
                         ),
-                        Icon(
-                          Icons.edit,
-                          size: 12,
-                          color: AppTheme.textTertiary,
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
           ),
           
           const SizedBox(width: 8),
@@ -1272,10 +1299,10 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       ),
                       IconButton(
                         icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
-                        onPressed: () => _removeField(key),
+                        onPressed: _isRequiredPromptField(key) ? null : () => _removeField(key),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                        tooltip: 'Remover',
+                        tooltip: _isRequiredPromptField(key) ? 'Campo obrigatório' : 'Remover',
                       ),
                     ],
                   )
@@ -1434,10 +1461,10 @@ class _DocumentEditorState extends State<DocumentEditor> {
                       // Botão remover
                       IconButton(
                         icon: Icon(Icons.close, size: 16, color: AppTheme.textTertiary),
-                        onPressed: () => _removeField(key),
+                        onPressed: _isRequiredPromptField(key) ? null : () => _removeField(key),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                        tooltip: 'Remover',
+                        tooltip: _isRequiredPromptField(key) ? 'Campo obrigatório' : 'Remover',
                       ),
                     ],
                   ),
@@ -1772,6 +1799,15 @@ class _DocumentEditorState extends State<DocumentEditor> {
   /// Confirma a edição do key de um campo
   void _confirmKeyEdit(String oldKey, String newKey) {
     if (widget.selectedNode == null) return;
+
+    // Não permite renomear fields obrigatórios de prompts
+    if (_isRequiredPromptField(oldKey)) {
+      setState(() {
+        _editingFieldKey = null;
+        _editingKeyController.clear();
+      });
+      return;
+    }
 
     final trimmedNewKey = newKey.trim();
     
