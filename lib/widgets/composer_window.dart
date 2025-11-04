@@ -1,247 +1,297 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/node.dart';
 import '../theme/app_theme.dart';
+import '../services/prompt_service.dart';
+import 'prompt_composer_tree_view.dart';
 
-/// Janela Composer que exibe informações detalhadas do node selecionado
-class ComposerWindow extends StatelessWidget {
-  final Node? selectedNode;
+/// Janela Prompt Composer com seleção múltipla e formatação de texto para LLM
+class ComposerWindow extends StatefulWidget {
+  final Node rootNode;
 
   const ComposerWindow({
-    Key? key,
-    required this.selectedNode,
-  }) : super(key: key);
+    super.key,
+    required this.rootNode,
+  });
+
+  @override
+  State<ComposerWindow> createState() => _ComposerWindowState();
+}
+
+class _ComposerWindowState extends State<ComposerWindow> {
+  late PromptService _promptService;
+  bool _includeChildren = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _promptService = PromptService(rootNode: widget.rootNode);
+  }
+
+  @override
+  void didUpdateWidget(ComposerWindow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Atualiza o serviço quando rootNode muda
+    if (oldWidget.rootNode.id != widget.rootNode.id) {
+      _promptService = PromptService(rootNode: widget.rootNode);
+      setState(() {});
+    }
+  }
+
+  void _handleSelectionChanged(Set<String> selectedNodeIds) {
+    setState(() {
+      _promptService.setSelectedNodes(selectedNodeIds);
+    });
+  }
+
+  void _copyToClipboard() {
+    final prompt = _promptService.generatePrompt(
+      includeChildren: _includeChildren,
+    );
+    Clipboard.setData(ClipboardData(text: prompt));
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Prompt copiado para a área de transferência!',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        backgroundColor: AppTheme.surfaceVariantDark,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  String _getFormattedPrompt() {
+    if (!_promptService.hasSelection()) {
+      return '// Selecione pelo menos um node para gerar o prompt';
+    }
+    return _promptService.generatePrompt(
+      includeChildren: _includeChildren,
+    );
+  }
+
+  int _getCharacterCount() {
+    return _getFormattedPrompt().length;
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (selectedNode == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.info_outline,
-              size: 48,
-              color: AppTheme.textTertiary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Nenhum node selecionado',
-              style: TextStyle(
-                fontSize: 14,
-                color: AppTheme.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     return Container(
       color: AppTheme.surfaceDark,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Cabeçalho com nome e ID
-            Container(
-              padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          // Coluna esquerda: TreeView com checkboxes
+          Expanded(
+            flex: 2,
+            child: Container(
               decoration: BoxDecoration(
-                color: AppTheme.surfaceElevated,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppTheme.neonBlue.withOpacity(0.3),
-                  width: 1,
+                color: AppTheme.surfaceDark,
+                border: Border(
+                  right: BorderSide(
+                    color: AppTheme.borderNeutral,
+                    width: 1,
+                  ),
                 ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.description,
-                        size: 20,
-                        color: AppTheme.neonBlue,
+                  // Cabeçalho da seção de seleção
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceElevated,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.borderNeutral,
+                          width: 1,
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          selectedNode!.name,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.check_box,
+                          size: 20,
+                          color: AppTheme.neonBlue,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Seleção de Nodes',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                             color: AppTheme.textPrimary,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.tag,
-                        size: 14,
-                        color: AppTheme.textSecondary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'ID: ${selectedNode!.id}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                          fontFamily: 'monospace',
+                        const Spacer(),
+                        Text(
+                          '${_promptService.getSelectedNodeIds().length} selecionado(s)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
+                  ),
+                  // TreeView
+                  Expanded(
+                    child: PromptComposerTreeView(
+                      rootNode: widget.rootNode,
+                      onSelectionChanged: _handleSelectionChanged,
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-
-            // Informações dos campos
-            if (selectedNode!.fields.isNotEmpty) ...[
-              Text(
-                'Campos',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...selectedNode!.fields.entries.map((entry) {
-                return _buildFieldCard(entry.key, entry.value);
-              }),
-            ] else ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceVariantDark,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: AppTheme.borderNeutral,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 16,
-                      color: AppTheme.textTertiary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Nenhum campo adicionado',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textTertiary,
+          ),
+          // Coluna direita: Preview e formatação
+          Expanded(
+            flex: 3,
+            child: Container(
+              color: AppTheme.surfaceDark,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Cabeçalho da seção de preview
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceElevated,
+                      border: Border(
+                        bottom: BorderSide(
+                          color: AppTheme.borderNeutral,
+                          width: 1,
+                        ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 16),
-
-            // Informações sobre filhos
-            Row(
-              children: [
-                Icon(
-                  Icons.account_tree,
-                  size: 16,
-                  color: AppTheme.textSecondary,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Filhos: ${selectedNode!.children.length}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.code,
+                          size: 20,
+                          color: AppTheme.neonCyan,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Preview do Prompt',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const Spacer(),
+                        // Opções de formatação
+                        Row(
+                          children: [
+                            // Checkbox para incluir filhos
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Checkbox(
+                                  value: _includeChildren,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _includeChildren = value ?? false;
+                                    });
+                                  },
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Text(
+                                  'Incluir filhos recursivamente',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 16),
+                            // Botão copiar
+                            OutlinedButton.icon(
+                              onPressed: _promptService.hasSelection()
+                                  ? _copyToClipboard
+                                  : null,
+                              icon: const Icon(Icons.copy, size: 16),
+                              label: const Text('Copiar'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFieldCard(String key, dynamic value) {
-    final valueType = _getValueType(value);
-    final displayValue = _formatValue(value, valueType);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceVariantDark,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: AppTheme.borderNeutral,
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                _getIconForType(valueType),
-                size: 16,
-                color: _getIconColorForType(valueType),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  key,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.textPrimary,
+                  // Área de preview
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SelectableText(
+                              _getFormattedPrompt(),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppTheme.textSecondary,
+                                fontFamily: 'monospace',
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _getTypeColor(valueType).withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: _getTypeColor(valueType).withOpacity(0.5),
-                    width: 1,
+                  // Rodapé com informações
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceElevated,
+                      border: Border(
+                        top: BorderSide(
+                          color: AppTheme.borderNeutral,
+                          width: 1,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: AppTheme.textTertiary,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          '${_getCharacterCount()} caracteres',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textTertiary,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (!_promptService.hasSelection())
+                          Text(
+                            'Selecione nodes para gerar o prompt',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textTertiary,
+                              fontStyle: FontStyle.italic,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Text(
-                  valueType,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: _getTypeColor(valueType),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundDark,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: SelectableText(
-              displayValue,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondary,
-                fontFamily: 'monospace',
+                ],
               ),
             ),
           ),
@@ -249,110 +299,4 @@ class ComposerWindow extends StatelessWidget {
       ),
     );
   }
-
-  String _getValueType(dynamic value) {
-    if (value == null) return 'null';
-    if (value is bool) return 'boolean';
-    if (value is int) return 'number';
-    if (value is double) return 'number';
-    if (value is String) {
-      // Verifica se é um caminho de imagem
-      if (value.toString().contains('assets/images/') || 
-          value.toString().contains('.png') ||
-          value.toString().contains('.jpg') ||
-          value.toString().contains('.jpeg') ||
-          value.toString().contains('.gif')) {
-        return 'image';
-      }
-      // Verifica se é um texto longo
-      if (value.toString().length > 100) {
-        return 'text';
-      }
-      return 'string';
-    }
-    if (value is List) return 'array';
-    if (value is Map) return 'object';
-    return 'unknown';
-  }
-
-  String _formatValue(dynamic value, String type) {
-    if (value == null) return 'null';
-    if (type == 'boolean') return value.toString();
-    if (type == 'number') return value.toString();
-    if (type == 'string' || type == 'text') {
-      final str = value.toString();
-      if (str.length > 200) {
-        return '${str.substring(0, 200)}...';
-      }
-      return str;
-    }
-    if (type == 'image') return value.toString();
-    if (type == 'array') return '[${(value as List).length} itens]';
-    if (type == 'object') return '{${(value as Map).length} chaves}';
-    return value.toString();
-  }
-
-  IconData _getIconForType(String type) {
-    switch (type) {
-      case 'boolean':
-        return Icons.toggle_on;
-      case 'number':
-        return Icons.numbers;
-      case 'string':
-        return Icons.text_fields;
-      case 'text':
-        return Icons.article;
-      case 'image':
-        return Icons.image;
-      case 'array':
-        return Icons.list;
-      case 'object':
-        return Icons.data_object;
-      default:
-        return Icons.help_outline;
-    }
-  }
-
-  Color _getIconColorForType(String type) {
-    switch (type) {
-      case 'boolean':
-        return AppTheme.neonBlue;
-      case 'number':
-        return AppTheme.neonCyan;
-      case 'string':
-        return AppTheme.textPrimary;
-      case 'text':
-        return AppTheme.neonCyan;
-      case 'image':
-        return AppTheme.neonBlue;
-      case 'array':
-        return AppTheme.neonPurple;
-      case 'object':
-        return AppTheme.neonIndigo;
-      default:
-        return AppTheme.textTertiary;
-    }
-  }
-
-  Color _getTypeColor(String type) {
-    switch (type) {
-      case 'boolean':
-        return AppTheme.neonBlue;
-      case 'number':
-        return AppTheme.neonCyan;
-      case 'string':
-        return AppTheme.textPrimary;
-      case 'text':
-        return AppTheme.neonCyan;
-      case 'image':
-        return AppTheme.neonBlue;
-      case 'array':
-        return AppTheme.neonPurple;
-      case 'object':
-        return AppTheme.neonIndigo;
-      default:
-        return AppTheme.textTertiary;
-    }
-  }
 }
-

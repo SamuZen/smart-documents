@@ -1487,14 +1487,14 @@ class _MyHomePageState extends State<MyHomePage> {
                             projectPath: _currentProjectPath,
                           ),
                         ),
-                      // Janela Composer - mostra informações do node selecionado
+                      // Janela Prompt Composer - seleção múltipla e formatação para LLM
                       if (_showComposerWindow)
                         DraggableResizableWindow(
                           key: const ValueKey('composer_window'),
-                          title: 'Composer',
-                          initialWidth: 500,
+                          title: 'Prompt Composer',
+                          initialWidth: 800,
                           initialHeight: 600,
-                          minWidth: 400,
+                          minWidth: 600,
                           minHeight: 400,
                           initialPosition: const Offset(1250, 50),
                           onClose: () {
@@ -1503,7 +1503,7 @@ class _MyHomePageState extends State<MyHomePage> {
                             });
                           },
                           child: ComposerWindow(
-                            selectedNode: _getSelectedNode(),
+                            rootNode: _rootNode,
                           ),
                         ),
                       // Indicador de status do Git no canto inferior direito
