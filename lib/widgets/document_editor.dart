@@ -1414,7 +1414,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                     _ImageHoverPreviewWidget(
                       imagePath: resolvedPath,
                       previewSize: 60,
-                      hoverSize: 300,
+                      hoverSize: 600,
                     ),
                     const SizedBox(width: 8),
                     // Caminho da imagem
@@ -1481,7 +1481,7 @@ class _DocumentEditorState extends State<DocumentEditor> {
                     _ImageHoverPreviewWidget(
                       imagePath: resolvedPath,
                       previewSize: 50,
-                      hoverSize: 300,
+                      hoverSize: 600,
                     ),
                     const SizedBox(width: 8),
                     Expanded(
@@ -1715,57 +1715,73 @@ class _ImageHoverPreviewWidgetState extends State<_ImageHoverPreviewWidget> {
   }
 
   void _removeOverlay() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
+    if (_overlayEntry != null) {
+      _overlayEntry!.remove();
+      _overlayEntry = null;
+    }
   }
 
-  void _showHoverImage(BuildContext context, Offset position) {
+
+  void _showHoverImage(BuildContext context) {
     _removeOverlay();
 
     _overlayEntry = OverlayEntry(
-      builder: (context) => Positioned(
-        left: position.dx + 20,
-        top: position.dy - widget.hoverSize / 2,
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: widget.hoverSize,
-            height: widget.hoverSize,
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceElevated,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppTheme.neonBlue.withOpacity(0.5),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.5),
-                  blurRadius: 20,
-                  spreadRadius: 5,
+      builder: (context) {
+        // Obtém o tamanho da tela para centralizar
+        final mediaQuery = MediaQuery.of(context);
+        final screenSize = mediaQuery.size;
+        
+        // Calcula a posição centralizada
+        final left = (screenSize.width - widget.hoverSize) / 2;
+        final top = (screenSize.height - widget.hoverSize) / 2;
+        
+        return Positioned(
+          left: left,
+          top: top,
+          child: IgnorePointer(
+            ignoring: true, // Ignora eventos de mouse para não interferir com outros componentes
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: widget.hoverSize,
+                height: widget.hoverSize,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceElevated,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.neonBlue.withOpacity(0.5),
+                  width: 2,
                 ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(
-                File(widget.imagePath),
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: AppTheme.surfaceVariantDark,
-                    child: Icon(
-                      Icons.broken_image,
-                      size: 64,
-                      color: AppTheme.textTertiary,
-                    ),
-                  );
-                },
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.5),
+                    blurRadius: 20,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(widget.imagePath),
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      color: AppTheme.surfaceVariantDark,
+                      child: Icon(
+                        Icons.broken_image,
+                        size: 64,
+                        color: AppTheme.textTertiary,
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
           ),
         ),
-      ),
+      );
+      },
     );
 
     Overlay.of(context).insert(_overlayEntry!);
@@ -1778,17 +1794,18 @@ class _ImageHoverPreviewWidgetState extends State<_ImageHoverPreviewWidget> {
         setState(() {
           _isHovering = true;
         });
-        final RenderBox? renderBox = context.findRenderObject() as RenderBox?;
-        if (renderBox != null) {
-          final position = renderBox.localToGlobal(Offset.zero);
-          _showHoverImage(context, position);
-        }
+        _showHoverImage(context);
       },
       onExit: (event) {
         setState(() {
           _isHovering = false;
         });
-        _removeOverlay();
+        // Remove o overlay após um pequeno delay para permitir transição suave
+        Future.delayed(const Duration(milliseconds: 50), () {
+          if (mounted && !_isHovering) {
+            _removeOverlay();
+          }
+        });
       },
       child: Container(
         width: widget.previewSize,
