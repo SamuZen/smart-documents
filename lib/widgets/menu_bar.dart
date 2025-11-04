@@ -15,6 +15,14 @@ class AppMenuBar extends StatelessWidget {
   final bool canRedo;
   final String? undoDescription;
   final String? redoDescription;
+  
+  // View menu callbacks and states
+  final VoidCallback? onToggleNavigation;
+  final VoidCallback? onToggleActions;
+  final VoidCallback? onToggleDocumentEditor;
+  final bool showNavigation;
+  final bool showActions;
+  final bool showDocumentEditor;
 
   const AppMenuBar({
     super.key,
@@ -30,6 +38,12 @@ class AppMenuBar extends StatelessWidget {
     this.canRedo = false,
     this.undoDescription,
     this.redoDescription,
+    this.onToggleNavigation,
+    this.onToggleActions,
+    this.onToggleDocumentEditor,
+    this.showNavigation = true,
+    this.showActions = true,
+    this.showDocumentEditor = true,
   });
 
   @override
@@ -103,6 +117,27 @@ class AppMenuBar extends StatelessWidget {
               ),
             ],
           ),
+          // Menu View
+          _MenuButton(
+            label: 'View',
+            menuItems: [
+              _MenuItem(
+                icon: showNavigation ? Icons.check_box : Icons.check_box_outline_blank,
+                label: 'Navegação',
+                onPressed: onToggleNavigation,
+              ),
+              _MenuItem(
+                icon: showActions ? Icons.check_box : Icons.check_box_outline_blank,
+                label: 'Ações',
+                onPressed: onToggleActions,
+              ),
+              _MenuItem(
+                icon: showDocumentEditor ? Icons.check_box : Icons.check_box_outline_blank,
+                label: 'Editor de Documento',
+                onPressed: onToggleDocumentEditor,
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -136,8 +171,16 @@ class _MenuButtonState extends State<_MenuButton> {
           return const Divider();
         }
         if (item is _MenuItem) {
+          // Para itens do menu View, mostra o ícone de checkbox com cor especial
+          final showCheckIcon = item.icon == Icons.check_box || item.icon == Icons.check_box_outline_blank;
           return MenuItemButton(
-            leadingIcon: Icon(item.icon, size: 16),
+            leadingIcon: showCheckIcon 
+                ? Icon(
+                    item.icon == Icons.check_box ? Icons.check_box : Icons.check_box_outline_blank,
+                    size: 16,
+                    color: item.icon == Icons.check_box ? AppTheme.neonBlue : AppTheme.textSecondary,
+                  )
+                : Icon(item.icon, size: 16),
             onPressed: item.enabled ? item.onPressed : null,
             child: Text(
               item.label,

@@ -1247,6 +1247,24 @@ class _MyHomePageState extends State<MyHomePage> {
             canRedo: _commandHistory.canRedo,
             undoDescription: _undoDescription != null ? 'Desfazer: $_undoDescription' : 'Desfazer',
             redoDescription: _redoDescription != null ? 'Refazer: $_redoDescription' : 'Refazer',
+            onToggleNavigation: () {
+              setState(() {
+                _showWindow = !_showWindow;
+              });
+            },
+            onToggleActions: () {
+              setState(() {
+                _showActionsWindow = !_showActionsWindow;
+              });
+            },
+            onToggleDocumentEditor: () {
+              setState(() {
+                _showDocumentEditor = !_showDocumentEditor;
+              });
+            },
+            showNavigation: _showWindow,
+            showActions: _showActionsWindow,
+            showDocumentEditor: _showDocumentEditor,
           ),
           // Conteúdo principal
           Expanded(
