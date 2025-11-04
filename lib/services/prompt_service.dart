@@ -1,17 +1,18 @@
 import '../models/node.dart';
 import '../models/prompt.dart';
 import 'prompt_formatter.dart';
-import 'prompt_manager_service.dart';
+import 'prompt_node_service.dart';
 
 /// Serviço para gerenciar estado de seleção e geração de prompts
 class PromptService {
   final Node rootNode;
   final Set<String> _selectedNodeIds = {};
-  final PromptManagerService? promptManager;
+  final Set<String> _selectedPromptIds = {};
+  final Node? promptsRootNode;
 
   PromptService({
     required this.rootNode,
-    this.promptManager,
+    this.promptsRootNode,
   });
 
   /// Adiciona um node à seleção
@@ -89,19 +90,53 @@ class PromptService {
     return _selectedNodeIds.isNotEmpty;
   }
 
+  /// Define os prompts selecionados
+  void setSelectedPrompts(Set<String> promptIds) {
+    _selectedPromptIds.clear();
+    _selectedPromptIds.addAll(promptIds);
+  }
+
+  /// Retorna os prompts selecionados extraídos da árvore
+  List<Prompt> getSelectedPrompts() {
+    if (promptsRootNode == null) return [];
+    
+    final List<Prompt> prompts = [];
+    for (final promptId in _selectedPromptIds) {
+      final node = promptsRootNode!.findById(promptId);
+      if (node != null && PromptNodeService.isPromptNode(node)) {
+        final prompt = PromptNodeService.nodeToPrompt(node);
+        if (prompt != null) {
+          prompts.add(prompt);
+        }
+      }
+    }
+    
+    // Ordena por order e depois por index
+    prompts.sort((a, b) {
+      final orderCompare = a.order.index.compareTo(b.order.index);
+      if (orderCompare != 0) return orderCompare;
+      return a.index.compareTo(b.index);
+    });
+    
+    return prompts;
+  }
+
   /// Gera o prompt formatado para LLM
   /// 
   /// [includeChildren] - Se true, inclui filhos recursivamente dos nodes selecionados
   String generatePrompt({bool includeChildren = false}) {
     final buffer = StringBuffer();
+    final selectedPrompts = getSelectedPrompts();
+
+    // Agrupa prompts por ordem
+    final startPrompts = selectedPrompts.where((p) => p.order == PromptOrder.start).toList();
+    final afterPrompts = selectedPrompts.where((p) => p.order == PromptOrder.after).toList();
+    final endPrompts = selectedPrompts.where((p) => p.order == PromptOrder.end).toList();
 
     // 1. Prompts com order = "start"
-    if (promptManager != null) {
-      final startPrompts = promptManager!.getPromptsByOrder(PromptOrder.start);
-      for (final prompt in startPrompts) {
-        buffer.writeln(prompt.prompt);
-        buffer.writeln(); // Linha em branco após cada prompt
-      }
+    for (final prompt in startPrompts) {
+      buffer.writeln(prompt.prompt);
+      buffer.writeln(); // Linha em branco após cada prompt
     }
 
     // 2. Conteúdo JSON dos nodes (existente)
@@ -125,15 +160,11 @@ class PromptService {
     // Isso permite que os prompts sejam montados mesmo sem nodes selecionados
 
     // 3. Prompts com order = "after"
-    if (promptManager != null) {
-      final afterPrompts = promptManager!.getPromptsByOrder(PromptOrder.after);
-      if (afterPrompts.isNotEmpty) {
-        // Adiciona linha em branco apenas se houver conteúdo antes (nodes ou prompts start)
-        if (selectedNodes.isNotEmpty || 
-            (promptManager!.getPromptsByOrder(PromptOrder.start).isNotEmpty)) {
-          buffer.writeln();
-          buffer.writeln();
-        }
+    if (afterPrompts.isNotEmpty) {
+      // Adiciona linha em branco apenas se houver conteúdo antes (nodes ou prompts start)
+      if (selectedNodes.isNotEmpty || startPrompts.isNotEmpty) {
+        buffer.writeln();
+        buffer.writeln();
       }
       for (final prompt in afterPrompts) {
         buffer.writeln(prompt.prompt);
@@ -142,15 +173,10 @@ class PromptService {
     }
 
     // 4. Prompts com order = "end"
-    if (promptManager != null) {
-      final endPrompts = promptManager!.getPromptsByOrder(PromptOrder.end);
-      if (endPrompts.isNotEmpty) {
-        // Adiciona linha em branco apenas se houver conteúdo antes
-        if (selectedNodes.isNotEmpty || 
-            (promptManager!.getPromptsByOrder(PromptOrder.start).isNotEmpty) ||
-            (promptManager!.getPromptsByOrder(PromptOrder.after).isNotEmpty)) {
-          buffer.writeln();
-        }
+    if (endPrompts.isNotEmpty) {
+      // Adiciona linha em branco apenas se houver conteúdo antes
+      if (selectedNodes.isNotEmpty || startPrompts.isNotEmpty || afterPrompts.isNotEmpty) {
+        buffer.writeln();
       }
       for (final prompt in endPrompts) {
         buffer.writeln(prompt.prompt);
